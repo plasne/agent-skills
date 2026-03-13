@@ -1,0 +1,72 @@
+[
+  {
+    "id": "demo-q001",
+    "question": "What services should I consider for running experiments in Azure?",
+    "answer": "Azure Machine Learning provides managed compute, parallel jobs, and MLflow integration for running experiments at scale. You can also consider Azure Databricks for notebook-based experimentation or Azure Container Instances for lightweight batch jobs.",
+    "refs": [
+      {
+        "url": "https://learn.microsoft.com/azure/machine-learning/overview",
+        "title": "What is Azure Machine Learning?",
+        "type": "url"
+      }
+    ],
+    "tags": ["topic:azure", "source:docs"],
+    "history": []
+  },
+  {
+    "id": "demo-q002",
+    "question": "How do I reset my account password?",
+    "answer": "Navigate to Settings, then Security, and select Reset Password. You will receive a confirmation email with a link to complete the reset. The link expires after 24 hours.",
+    "refs": [
+      {
+        "url": "https://docs.example.com/security/password-reset",
+        "title": "Password Reset Guide",
+        "type": "url"
+      }
+    ],
+    "tags": ["topic:security", "source:sme"],
+    "history": []
+  },
+  {
+    "id": "demo-q003",
+    "question": "What is the difference between a data lake and a data warehouse?",
+    "answer": "A data lake stores raw, unstructured data at any scale and supports schema-on-read. A data warehouse stores structured, processed data optimized for analytical queries with schema-on-write. Data lakes are typically cheaper for storage, while data warehouses offer faster query performance for business intelligence workloads.",
+    "refs": [
+      {
+        "url": "https://learn.microsoft.com/azure/architecture/data-guide/",
+        "title": "Azure Data Architecture Guide",
+        "type": "url"
+      }
+    ],
+    "tags": ["topic:data", "source:docs", "complexity:medium"],
+    "history": []
+  },
+  {
+    "id": "demo-q004",
+    "question": "Can you explain how to configure autoscaling for an AKS cluster?",
+    "answer": "Enable the cluster autoscaler on your AKS node pool by running az aks update with the --enable-cluster-autoscaler flag. Set --min-count and --max-count to define the scaling range. The autoscaler monitors pending pods and scales nodes up when pods cannot be scheduled, and scales down when nodes are underutilized for a configurable period.",
+    "refs": [
+      {
+        "url": "https://learn.microsoft.com/azure/aks/cluster-autoscaler",
+        "title": "Cluster autoscaler in AKS",
+        "type": "url"
+      }
+    ],
+    "tags": ["topic:kubernetes", "source:docs", "complexity:high"],
+    "history": []
+  },
+  {
+    "id": "demo-q005",
+    "question": "What are managed identities and when should I use them?",
+    "answer": "Managed identities provide an automatically managed identity in Microsoft Entra ID for Azure resources. Use them to authenticate to any service that supports Entra authentication without storing credentials in code. System-assigned identities are tied to a single resource lifecycle, while user-assigned identities can be shared across multiple resources.",
+    "refs": [
+      {
+        "url": "https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview",
+        "title": "Managed identities overview",
+        "type": "url"
+      }
+    ],
+    "tags": ["topic:security", "topic:identity", "source:docs"],
+    "history": []
+  }
+]
