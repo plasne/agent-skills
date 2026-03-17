@@ -110,6 +110,9 @@ To build the image locally from the repository root (the Dockerfile builds both 
 docker build --rm -t exp-catalog:latest -f catalog.Dockerfile .
 ```
 
+> [!NOTE]
+> The `catalog.Dockerfile` uses `$BUILDPLATFORM` and `$TARGETARCH` build arguments that require Docker BuildKit. These variables are not supported by `az acr build`, which strips them silently and produces a broken image. For Azure Container Apps or ACR-based deployments, use the pre-built GHCR image instead of building via `az acr build`.
+
 To run the container:
 
 ```bash
@@ -191,6 +194,9 @@ A good default for an instance running in a container might be `/tmp/cache`.
 
 ## Authentication
 
+> [!IMPORTANT]
+> When deploying the catalog to Azure with public ingress, always enable authentication (OIDC or EasyAuth). Never disable authentication as a shortcut to work around 401 errors — instead, fix the token configuration or acquire a proper Bearer token. For programmatic access, use `az account get-access-token --resource api://<appId>`.
+
 The catalog supports three authentication modes:
 
 - **Anonymous** (default): No authentication is required. This is appropriate for local development, testing, or when the catalog runs on localhost as part of an evaluation image. Many users run without auth and this is perfectly fine when the instance is not publicly exposed.
@@ -198,6 +204,49 @@ The catalog supports three authentication modes:
 - **OpenID Connect (OIDC)**: For direct OIDC authentication using providers such as Microsoft Entra ID, Auth0, or Okta. Requires setting `OIDC_AUTHORITY`, `OIDC_CLIENT_ID`, and optionally `OIDC_CLIENT_SECRET`.
 
 The catalog does not have authorization levels — either a user can do everything or nothing.
+
+### OIDC Setup for Microsoft Entra ID
+
+When deploying with OIDC auth using Entra ID, follow the setup guide in the catalog's [auth.md](https://github.com/plasne/experiment-catalog/blob/main/catalog/auth.md#microsoft-entra-id-setup). The key steps are:
+
+1. Create an Entra ID app registration and service principal.
+2. Add a Web redirect URI for `https://<catalog-fqdn>/auth/callback` (required for the browser login flow).
+3. Set `OIDC_AUTHORITY`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_AUDIENCES` on the catalog host.
+4. If managed identities or service principals need access, create an Application-type app role and assign it via the Graph API (delegated scopes are not sufficient for the client credentials flow).
+
+Key gotchas to watch for:
+
+- `OIDC_AUDIENCES` must include **both** the raw appId and the `api://` URI. Azure AD v2.0 tokens use the raw appId as the `aud` claim, so listing only the `api://` form causes all tokens to be rejected with 401.
+- The redirect URI must be registered on the app registration before browser login works. API-only bearer token auth works without it, which makes this easy to miss.
+- Some tenants have policies limiting credential lifetimes. If secret creation fails, reduce the `--end-date` until within policy limits.
+
+## AML Evaluation Runner Integration
+
+When using the catalog with the AML Evaluation Runner's catalog action, the project and experiment must exist in the catalog before the pipeline is submitted. The catalog action only POSTs individual results; it does not create projects or experiments.
+
+Create the project and experiment before running the AML pipeline:
+
+```bash
+# Create a project
+curl -X POST "<CATALOG_URL>/api/projects" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "<PROJECT_NAME>"}'
+
+# Create an experiment (both name and hypothesis are required)
+curl -X POST "<CATALOG_URL>/api/projects/<PROJECT_NAME>/experiments" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "<EXPERIMENT_NAME>", "hypothesis": "<DESCRIPTION>"}'
+```
+
+The experiment `name` must match `AML_EXPERIMENT_NAME` from the runner's `.exp.env` file. The `hypothesis` field is required by the API and cannot be omitted.
+
+Results posted by the catalog action are grouped into sets (one set per pipeline run, identified by the AML job timestamp). To view results, query the set endpoint:
+
+```bash
+curl "<CATALOG_URL>/api/projects/<PROJECT>/experiments/<EXPERIMENT>/sets/<SET_ID>"
+```
+
+The experiment list endpoint does not inline results; it shows set counts and date ranges only.
 
 Full authentication details are in: <https://github.com/plasne/experiment-catalog/blob/main/catalog/auth.md>.
 
@@ -248,6 +297,11 @@ When deploying for production or within a customer environment, consider defense
 | `image OS/Arc must be linux/amd64`           | Image built for wrong platform (e.g., arm64 on Apple Silicon) | Rebuild with `docker build --platform linux/amd64`                                                                                                   |
 | `failed to scan dependencies` during `az acr build` | Dockerfile uses `$BUILDPLATFORM` / `$TARGETARCH` args unsupported by ACR | Remove `--platform=$BUILDPLATFORM` and `$TARGETARCH` from the Dockerfile, or build locally with `docker build` and push with `docker push`  |
 | `Credential lifetime exceeds max value` when creating app secret | Org policy limits secret duration | Use a shorter `--end-date`, for example `--end-date "$(date -u -v+30d +%Y-%m-%dT%H:%M:%SZ)"`, and adjust until within policy limits               |
+| UI shows "Error loading experiments" but API works with bearer token | Stale `auth_not_required` cookie from before OIDC was enabled | Clear the `auth_not_required` cookie in the browser (DevTools → Application → Cookies), then refresh. The UI caches this cookie when it first detects auth is not required, and it persists across page reloads. Use an incognito window as an alternative. |
+| OIDC login redirect fails with AADSTS error  | Redirect URI not registered on app registration               | Add `https://<catalog-fqdn>/auth/callback` as a Web redirect URI: `az ad app update --id <appId> --web-redirect-uris "https://<fqdn>/auth/callback"` |
+| `401 Unauthorized` with valid bearer token    | `OIDC_AUDIENCES` only contains the `api://` URI format        | Azure AD v2.0 tokens use the raw appId as the `aud` claim. Set `OIDC_AUDIENCES` to include both: `<appId>,api://<appId>` |
+| `AADSTS650057: Invalid resource` when acquiring token via `az account get-access-token` | Azure CLI not pre-authorized on the app registration | Expose a delegated scope (`access_as_user`) and add Azure CLI (`04b07795-8ddb-461a-bbee-02f9e1bf7b46`) as a pre-authorized application |
+| MI gets `401` when posting to catalog with `CATALOG_API_APP_ID_URI` set | MI uses client credentials flow which requires an Application-type app role | Create an app role with `allowedMemberTypes: ["Application"]` and assign it to the MI's service principal via the Graph API |
 | EasyAuth redirect loop                       | Misconfigured redirect URI or missing ID token issuance       | Verify the redirect URI matches `https://<fqdn>/.auth/login/aad/callback` and that `--enable-id-token-issuance true` was set on the app registration |
 | `401` despite EasyAuth enabled               | Token validation header mismatch                              | Ensure `OIDC_VALIDATE_HEADER` is set to `X-MS-TOKEN-AAD-ID-TOKEN` (exact case)                                                                      |
 | `401` on API calls after EasyAuth login (Container Apps) | Token store not enabled; `X-MS-TOKEN-AAD-ID-TOKEN` header not forwarded | Enable the token store with blob backing: `az containerapp auth update --token-store true --blob-container-uri https://<account>.blob.core.windows.net/tokenstore`. Log out and back in after enabling. |

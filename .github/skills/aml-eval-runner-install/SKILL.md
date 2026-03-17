@@ -20,6 +20,8 @@ This skill targets users who have never used the AML Evaluation Runner. They may
 
 - Ask the user whether they want to use either of the available "actions" (catalog integration, mlflow logging). Actions are optional plug-ins that hook into the inference, evaluation, or summarization steps.
 
+- Do not deploy VNets, Private Endpoints, Private DNS Zones, NSGs, or any network-isolation infrastructure unless the user explicitly requests it. The default deployment should use public endpoints with RBAC-based security. The `SetupEnv.ps1` Bicep templates deploy all of this extra infrastructure automatically — do not use them unless the user specifically asks for private networking or production hardening.
+
 ## Source Code
 
 The AML Evaluation Runner is available on GitHub at: <https://github.com/commercial-software-engineering/aml-evaluation-runner>.
@@ -89,7 +91,8 @@ Resources that the infra scripts can also deploy but are **not required** for th
 
 Deploy only the resources listed in the "Azure Resources Required" section above using `az` CLI commands. This is the **recommended approach** because it deploys exactly what is needed, gives clear per-resource feedback, and does not require PowerShell.
 
-> **Important**: The `infra/` directory contains Bicep templates and a `SetupEnv.ps1` script, but even with `-EnableAML`, these templates deploy significant additional infrastructure (VNet, subnets, NSGs, Private DNS Zones, Private Endpoints for every resource) that is **not required** for the runner to function. That extra infrastructure is a hardening/production concern. For initial setup and development, use the `az` CLI approach below. Reserve the Bicep templates for production hardening only.
+> [!IMPORTANT]
+> The `infra/` directory contains Bicep templates and a `SetupEnv.ps1` script, but even with `-EnableAML`, these templates deploy significant additional infrastructure (VNet, subnets, NSGs, Private DNS Zones, Private Endpoints for every resource) that is **not required** for the runner to function. **Do not use the Bicep templates or `SetupEnv.ps1` unless the user explicitly asks for private networking or production hardening.** Default to the `az` CLI approach below, which deploys only what is needed with public endpoints and RBAC.
 
 All `az` commands below should be run in a visible terminal so the user can see progress. For long-running commands (deployment group create, etc.), prefer `create_and_run_task` over background terminals so output streams in the VS Code terminal panel.
 
@@ -324,7 +327,8 @@ az ml workspace update \
 
 ### Alternative: SetupEnv.ps1 (Bicep)
 
-> **Warning**: `SetupEnv.ps1` deploys VNet, subnets, NSGs, Private DNS Zones, and Private Endpoints for every resource — infrastructure that is not required for the runner to function. It also takes a long time to deploy (~15–30 minutes) and produces verbose Bicep compilation warnings that obscure progress. Use this approach only for production environments where network isolation is required. Requires PowerShell.
+> [!WARNING]
+> **Do not use `SetupEnv.ps1` unless the user explicitly requests private networking or production hardening.** It deploys VNet, subnets, NSGs, Private DNS Zones, and Private Endpoints for every resource — infrastructure that is not required for the runner to function. It also takes 15–30 minutes to deploy and produces verbose Bicep compilation warnings that obscure progress. The `az` CLI approach above is the default.
 
 ```powershell
 cd infra
@@ -519,6 +523,24 @@ EVAL_SET_CATALOG_API_APP_ID_URI=<app-id-uri>
 
 When `CATALOG_API_APP_ID_URI` is set, the action acquires a bearer token via `DefaultAzureCredential` and sends it in the `Authorization` header. When omitted, the action posts without authentication. Omit this variable when the catalog API does not require auth.
 
+> [!NOTE]
+> The managed identity uses the **client credentials flow** to acquire tokens. This requires an **Application-type app role** on the catalog's app registration — a delegated scope alone is not sufficient. The app role must have `allowedMemberTypes: ["Application"]`, and the MI's service principal must be assigned that role via the MS Graph API (`/servicePrincipals/<catalog-sp-id>/appRoleAssignedTo`). See the experiment-catalog-install skill's "OIDC Setup for Microsoft Entra ID" section for the full procedure.
+>
+> The `CATALOG_API_APP_ID_URI` value should be the identifier URI of the catalog app registration (for example, `api://<appId>`).
+
+> [!IMPORTANT]
+> The experiment and project must already exist in the catalog before submitting the pipeline. The catalog action only POSTs individual results to `/projects/{project}/experiments/{experiment}/results`; it does not create experiments or projects. If the experiment is missing, every result POST returns `404: experiment not found` and no data reaches the catalog.
+>
+> Create the experiment before running the pipeline:
+>
+> ```bash
+> curl -X POST "<CATALOG_URL>/projects/<PROJECT>/experiments" \
+>   -H "Content-Type: application/json" \
+>   -d '{"name": "<EXPERIMENT_NAME>", "hypothesis": "<DESCRIPTION>"}'
+> ```
+>
+> Both `name` and `hypothesis` are required fields. The experiment `name` must match `AML_EXPERIMENT_NAME` (which is propagated as `CATALOG_EXPERIMENT_NAME` at runtime).
+
 > [!IMPORTANT]
 > The catalog URL must include the `/api` path suffix. The action appends `/projects/{project}/experiments/{experiment}/results` to this base, so omitting `/api` produces 404 errors.
 
@@ -640,4 +662,7 @@ The runner supports Application Insights integration via the `AML_APP_INSIGHTS_C
 | Image build fails on Apple Silicon | Wrong platform | Build with `docker build --platform linux/amd64` |
 | DevTunnel token expired | Token needs refresh | Regenerate with `devtunnel token --scopes connect <id>` |
 | Ground truths not found | Wrong path or tag filter | Verify `AML_GROUND_TRUTHS_PATH` and `GROUND_TRUTH_INCLUDE_TAGS` in your `.env` |
+| `404: experiment not found` from catalog action | The experiment does not exist in the catalog | Create the experiment in the catalog before submitting the pipeline. The catalog action only POSTs results, it does not create experiments. |
+| Catalog action posts succeed (200) but no results visible in catalog experiment list | Results are stored per-set, not shown in the experiment summary | Query a specific set: `GET /api/projects/{project}/experiments/{experiment}/sets/{set_id}` to see the results. The experiment list endpoint does not inline results. |
+| `EVAL_SET_` prefixed variables not reaching the action | Prefix stripping misconfiguration | The `EVAL_SET_` prefix is stripped at runtime so `EVAL_SET_CATALOG_URL` becomes `CATALOG_URL`. Verify the full prefixed name in `.exp.env`. |
 ````

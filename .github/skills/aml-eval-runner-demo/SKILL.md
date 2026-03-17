@@ -97,6 +97,9 @@ cd aml-evaluation-runner/experiment
 uv run python run.py
 ```
 
+> [!IMPORTANT]
+> When the catalog action is enabled (`ENABLED_ACTIONS=catalog`), the target experiment must already exist in the experiment catalog before submitting the pipeline. The catalog action only POSTs individual results; it does not create experiments. If the experiment does not exist, every result POST returns `404: experiment not found` and no data reaches the catalog. Create the experiment via the catalog API or UI before running `run.py`. See the Catalog Action Pre-Creation section for details.
+
 ## Parameters Reference
 
 | Parameter       | Default                                           | Description                                  |
@@ -154,12 +157,80 @@ python .github/skills/aml-eval-runner-demo/scripts/setup_demo.py \
 
 Or point `AML_GROUND_TRUTHS_PATH` in `.exp.env` to an existing directory of per-record JSON files.
 
+## Catalog Action Pre-Creation
+
+The catalog action (enabled via `ENABLED_ACTIONS=catalog`) posts evaluation results to the experiment catalog during the summarization step. The action calls `POST /projects/{project}/experiments/{experiment}/results` for each evaluated ground truth. This endpoint requires the experiment to exist beforehand.
+
+Before submitting the AML pipeline, create the experiment:
+
+```bash
+curl -X POST "<CATALOG_URL>/projects/<PROJECT>/experiments" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "<EXPERIMENT_NAME>", "hypothesis": "<DESCRIPTION>"}'
+```
+
+Both `name` and `hypothesis` are required fields. The `name` value must match the `AML_EXPERIMENT_NAME` in your `.exp.env` file (this becomes the `CATALOG_EXPERIMENT_NAME` at runtime).
+
+If you ran a pipeline before creating the experiment, the eval output files are still available in the `joboutput` storage container at `<experiment>/<timestamp>/eval/`. You can replay them without re-running the pipeline by downloading each eval JSON and POSTing its `$metrics` to the catalog.
+
+## Authentication for GTC and Catalog
+
+> [!IMPORTANT]
+> Never disable authentication on GTC or the experiment catalog to work around 401 errors during seeding or pipeline runs. Always acquire Bearer tokens for programmatic access.
+
+### Seeding GTC with Auth Enabled
+
+When the GTC instance has EasyAuth enabled, acquire a Bearer token before seeding ground truths:
+
+```bash
+TOKEN=$(az account get-access-token --resource api://<gtc-appId> --query accessToken -o tsv)
+curl -H "Authorization: Bearer $TOKEN" "https://<gtc-fqdn>/v1/stats"
+```
+
+Use this token when calling the GTC API to export ground truths or verify data.
+
+### Catalog Action Authentication
+
+When the experiment catalog has OIDC or EasyAuth enabled, the catalog action in the AML pipeline must authenticate. Set these env vars in `.exp.env`:
+
+```dotenv
+EVAL_SET_CATALOG_URL=https://<catalog-fqdn>
+EVAL_SET_CATALOG_PROJECT=<project-name>
+EVAL_SET_CATALOG_API_APP_ID_URI=api://<catalog-appId>
+```
+
+The `CATALOG_API_APP_ID_URI` setting tells the catalog action to acquire a token for the specified audience using the compute cluster's managed identity. The managed identity must be able to obtain a token for the catalog's app registration.
+
+For managed identity access to work:
+
+1. The catalog app registration must have an **Application-type app role** (delegated scopes are not sufficient for the client credentials flow).
+2. The managed identity's service principal must be assigned that app role via the Graph API.
+3. The catalog's `OIDC_AUDIENCES` must include both the raw `appId` and the `api://` URI format.
+
+### Pre-Creating Experiments with Auth
+
+When creating the project and experiment before the pipeline run, include the Bearer token:
+
+```bash
+TOKEN=$(az account get-access-token --resource api://<catalog-appId> --query accessToken -o tsv)
+
+curl -X POST "https://<catalog-fqdn>/api/projects" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name": "<PROJECT_NAME>"}'
+
+curl -X POST "https://<catalog-fqdn>/api/projects/<PROJECT_NAME>/experiments" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name": "<EXPERIMENT_NAME>", "hypothesis": "<DESCRIPTION>"}'
+```
+
 ## Troubleshooting
 
 ### Common Errors
 
 | Symptom                                                                              | Cause                                                                                        | Fix                                                                                                                                                                                  |
-| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- | --------------------------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `ModuleNotFoundError: inference`                                                     | `AML_INF_MODULE_DIR` in `.exp.env` is wrong.                                                 | Set to `../inference/demo-inference`.                                                                                                                                                |
 | `ModuleNotFoundError: evaluation`                                                    | `AML_EVAL_MODULE_DIR` in `.exp.env` is wrong.                                                | Set to `../evaluation/demo-evaluation`.                                                                                                                                              |
 | `ImportError: cannot import name 'EventBus' from 'inference'`                        | Runner hard-codes `from inference.inference import EventBus, GroundTruth`.                   | Ensure `inference.py` exports `EventBus` and `GroundTruth` stub classes in `__all__`.                                                                                                |
@@ -169,8 +240,8 @@ Or point `AML_GROUND_TRUTHS_PATH` in `.exp.env` to an existing directory of per-
 | `AccessError: Failed to create queue ... authorization failure`                      | Same root cause as table authorization failure.                                              | Same fix as table authorization.                                                                                                                                                     |
 | All `answer_similarity` scores are 0                                                 | Ground truth records have no `answer` field.                                                 | Add expected answers or use the included sample data.                                                                                                                                |
 | `FileNotFoundError` on ground truths                                                 | Ground truth files not uploaded to the datastore.                                            | Run `setup_demo.py` first, or upload files with `az storage blob upload-batch --auth-mode login`.                                                                                    |
-| Runner root not found                                                                | Setup script cannot locate the runner directory.                                             | Pass `--runner-root` explicitly to the setup script.                                                                                                                                 |
-| `az ml job download` fails with auth error                                           | Storage account has key-based auth disabled; the CLI falls back to keys by default.          | Use `az storage blob download --auth-mode login` instead (see Log Retrieval section).                                                                                                |
+| Runner root not found                                                                | Setup script cannot locate the runner directory.                                             | Pass `--runner-root` explicitly to the setup script.                                                                                                                                 |     | `404: experiment not found` in eval or summarization logs | Catalog action tried to POST results but the experiment does not exist in the catalog. | Create the experiment in the catalog before submitting the pipeline. See the Catalog Action Pre-Creation section. |
+| Catalog action silently skips all results (no errors, no data in catalog)            | `CATALOG_URL` or `CATALOG_PROJECT` env var is missing or empty.                              | Verify `EVAL_SET_CATALOG_URL` and `EVAL_SET_CATALOG_PROJECT` are set in your `.exp.env`. The `EVAL_SET_` prefix is stripped at runtime.                                              |     | `az ml job download` fails with auth error                | Storage account has key-based auth disabled; the CLI falls back to keys by default.    | Use `az storage blob download --auth-mode login` instead (see Log Retrieval section).                             |
 
 ### Ground Truth Upload
 

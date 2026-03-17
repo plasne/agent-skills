@@ -219,7 +219,104 @@ az cosmosdb sql role assignment create \
   --scope /
 ```
 
+> [!WARNING]
+> The Cosmos DB Built-in Data Contributor role grants data-plane access (read, write, query documents) but does **not** include control-plane permissions such as `Microsoft.DocumentDB/databaseAccounts/sqlDatabases/write`. This means `cosmos_container_manager.py --use-aad` may fail with a 403 Forbidden when creating databases or containers, even though the role assignment succeeds.
+>
+> When this occurs, create the database and containers via the Azure CLI (ARM control plane) instead:
+>
+> ```bash
+> az cosmosdb sql database create \
+>   --account-name <cosmos-account> \
+>   --resource-group <resource-group> \
+>   --name gt-curator
+>
+> az cosmosdb sql container create \
+>   --account-name <cosmos-account> \
+>   --resource-group <resource-group> \
+>   --database-name gt-curator \
+>   --name ground_truth \
+>   --partition-key-path /datasetName /bucket \
+>   --kind MultiHash
+>
+> az cosmosdb sql container create \
+>   --account-name <cosmos-account> \
+>   --resource-group <resource-group> \
+>   --database-name gt-curator \
+>   --name assignments \
+>   --partition-key-path /pk
+>
+> az cosmosdb sql container create \
+>   --account-name <cosmos-account> \
+>   --resource-group <resource-group> \
+>   --database-name gt-curator \
+>   --name tags \
+>   --partition-key-path /pk
+> ```
+>
+> The user running these CLI commands needs at minimum the Contributor or Cosmos DB Account Reader role at the ARM level on the Cosmos DB account. The data-plane RBAC role is still needed separately for the application to read and write documents at runtime.
+
 Also assign this role to the Container App's managed identity so the application can read and write data at runtime.
+
+### Build and Push the Container Image
+
+Build the image from the repository root. The Dockerfile builds both the frontend and backend into a single image:
+
+```bash
+docker build --rm --platform linux/amd64 \
+  -t <acr-name>.azurecr.io/gtc-backend:latest \
+  -f backend/Dockerfile .
+```
+
+Push to the container registry:
+
+```bash
+az acr login --name <acr-name>
+docker push <acr-name>.azurecr.io/gtc-backend:latest
+```
+
+If you are using the pre-built GHCR image instead, skip this step and reference `ghcr.io/andrewdoing/groundtruthcurator:latest` (or the appropriate tag) in the Container App creation below.
+
+### Create the Container App
+
+> [!IMPORTANT]
+> This step is required. Provisioning the Cosmos DB and initializing containers is the data tier only. The GTC application must be deployed as a Container App (or other hosting solution) to be accessible. Without this step, the Ground Truth Curator has no running frontend or API.
+
+If a Container App Environment does not already exist, create one:
+
+```bash
+az containerapp env create \
+  --name <cae-name> \
+  --resource-group <resource-group> \
+  --location <location> \
+  --logs-workspace-id <log-analytics-workspace-id>
+```
+
+Create the Container App with the managed identity and external ingress:
+
+```bash
+az containerapp create \
+  --name gtc \
+  --resource-group <resource-group> \
+  --environment <cae-name> \
+  --image <acr-name>.azurecr.io/gtc-backend:latest \
+  --registry-server <acr-name>.azurecr.io \
+  --registry-identity <managed-identity-resource-id> \
+  --user-assigned <managed-identity-resource-id> \
+  --target-port 8000 \
+  --ingress external \
+  --env-vars \
+    GTC_REPO_BACKEND=cosmos \
+    GTC_COSMOS_ENDPOINT=https://<cosmos-account>.documents.azure.com:443/
+```
+
+Verify the Container App is running:
+
+```bash
+az containerapp show --name gtc --resource-group <resource-group> \
+  --query "properties.configuration.ingress.fqdn" -o tsv
+```
+
+The FQDN returned is the public URL for the GTC application.
 
 ### Environment Configuration for Azure
 
@@ -275,11 +372,139 @@ Inside the container, use `http://host.docker.internal:8081` to reach the host's
 
 ## Authentication
 
+> [!IMPORTANT]
+> Never disable authentication as a shortcut. When GTC is deployed to Azure with EasyAuth enabled, use Bearer tokens for programmatic access instead of setting `GTC_EZAUTH_ENABLED=false` or `GTC_AUTH_MODE=dev`. Disabling auth to work around 401 errors masks configuration problems and leaves the application unprotected.
+
 The backend supports:
 
-- **Anonymous / Dev mode** (default): No authentication required. Uses the `X-User-Id` header if provided, otherwise `anonymous`. Appropriate for local development and testing.
+- **Anonymous / Dev mode** (default): No authentication required. Uses the `X-User-Id` header if provided, otherwise `anonymous`. Appropriate for **local development and testing only**.
 - **EasyAuth**: When hosted in Azure App Service or Container Apps, EasyAuth can be configured with the Microsoft identity provider. Set `GTC_EZAUTH_ENABLED=true`. The app derives user identity from the principal's `email`, then `oid`, then `name`.
-- See `infra/easy-auth-setup.md` in the repository for configuration steps.
+
+See `infra/easy-auth-setup.md` in the repository for additional reference.
+
+### Entra ID App Registration for EasyAuth
+
+When deploying with EasyAuth, create an Entra ID app registration and configure it for both browser login and programmatic (Bearer token) access:
+
+1. **Create the app registration** with a redirect URI for EasyAuth's callback:
+
+    ```bash
+    az ad app create \
+      --display-name "<app-name>" \
+      --sign-in-audience AzureADMyOrg \
+      --web-redirect-uris "https://<gtc-fqdn>/.auth/login/aad/callback" \
+      --enable-id-token-issuance true
+    ```
+
+2. **Create a service principal** for the app:
+
+    ```bash
+    az ad sp create --id <appId>
+    ```
+
+3. **Add an Application ID URI** (required for Bearer token access):
+
+    ```bash
+    az ad app update --id <appId> \
+      --identifier-uris "api://<appId>"
+    ```
+
+4. **Expose a delegated scope** (`user_impersonation`) so users and CLI tools can request tokens:
+
+    ```bash
+    az ad app update --id <appId> --set \
+      "api.oauth2PermissionScopes=[{\"id\":\"$(uuidgen)\",\"adminConsentDescription\":\"Access GTC\",\"adminConsentDisplayName\":\"Access GTC\",\"isEnabled\":true,\"type\":\"User\",\"userConsentDescription\":\"Access GTC\",\"userConsentDisplayName\":\"Access GTC\",\"value\":\"user_impersonation\"}]"
+    ```
+
+5. **Pre-authorize Azure CLI** so `az account get-access-token` works without admin consent:
+
+    ```bash
+    SCOPE_ID=$(az ad app show --id <appId> \
+      --query "api.oauth2PermissionScopes[0].id" -o tsv)
+
+    az ad app update --id <appId> --set \
+      "api.preAuthorizedApplications=[{\"appId\":\"04b07795-8ddb-461a-bbee-02f9e1bf7b46\",\"delegatedPermissionIds\":[\"$SCOPE_ID\"]}]"
+    ```
+
+    The ID `04b07795-8ddb-461a-bbee-02f9e1bf7b46` is the well-known Azure CLI first-party application.
+
+6. **Create a client secret** (required by EasyAuth):
+
+    ```bash
+    az ad app credential reset --id <appId> --display-name "EasyAuth" \
+      --end-date "$(date -u -v+180d +%Y-%m-%dT%H:%M:%SZ)"
+    ```
+
+### Container Apps EasyAuth Configuration
+
+Enable EasyAuth on the Container App with `RedirectToLoginPage` (not `AllowAnonymous`):
+
+```bash
+az containerapp auth microsoft update \
+  --name <container-app-name> \
+  --resource-group <resource-group> \
+  --client-id <appId> \
+  --client-secret-name <secret-name> \
+  --issuer "https://login.microsoftonline.com/<tenant-id>/v2.0" \
+  --yes
+
+az containerapp auth update \
+  --name <container-app-name> \
+  --resource-group <resource-group> \
+  --unauthenticated-client-action RedirectToLoginPage
+```
+
+After enabling EasyAuth, configure `allowedAudiences` and `allowedApplications` via the REST API. These settings control which tokens EasyAuth accepts:
+
+- `allowedAudiences` must include `api://<appId>` (the audience in tokens acquired via `az account get-access-token --resource api://<appId>`)
+- `allowedApplications` must include the Azure CLI application ID (`04b07795-8ddb-461a-bbee-02f9e1bf7b46`) so CLI-acquired tokens are accepted. An empty `allowedApplications` array blocks all client applications.
+
+```bash
+# Get current auth config
+az rest --method GET \
+  --url "https://management.azure.com/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.App/containerApps/<app>/authConfigs/current?api-version=2024-03-01"
+
+# Update with allowedAudiences and allowedApplications
+az rest --method PUT \
+  --url "https://management.azure.com/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.App/containerApps/<app>/authConfigs/current?api-version=2024-03-01" \
+  --body @auth-config.json
+```
+
+The `auth-config.json` body must include the full auth config with `allowedAudiences` and `allowedApplications` set in the `identityProviders.azureActiveDirectory.validation` section.
+
+Set the GTC environment variable to enable EasyAuth middleware:
+
+```bash
+az containerapp update \
+  --name <container-app-name> \
+  --resource-group <resource-group> \
+  --set-env-vars GTC_EZAUTH_ENABLED=true GTC_AUTH_MODE=entra
+```
+
+### Programmatic Access via Bearer Token
+
+Once EasyAuth and the app registration are configured, acquire a Bearer token with the Azure CLI:
+
+```bash
+az account get-access-token --resource api://<appId> --query accessToken -o tsv
+```
+
+Use the token in API calls:
+
+```bash
+TOKEN=$(az account get-access-token --resource api://<appId> --query accessToken -o tsv)
+curl -H "Authorization: Bearer $TOKEN" "https://<gtc-fqdn>/v1/stats"
+```
+
+This is the correct way to authenticate scripts, seeding tools, and CI/CD pipelines against a deployed GTC instance. Never disable EasyAuth or switch to dev mode to bypass authentication.
+
+### Managed Identity Access
+
+For service-to-service access (for example, AML compute calling the GTC API), the managed identity must be able to acquire a token for the GTC app's audience. Ensure the app registration's `allowedApplications` includes the managed identity's application (client) ID, or use an app role assignment for the client credentials flow.
+
+### Container Apps EasyAuth Behavior
+
+Container Apps EasyAuth returns `401` (not `302`) for unauthenticated API requests, even from browsers. The `/.auth/login/aad` endpoint handles the actual browser redirect. Frontend code should detect `401` responses and redirect to `/.auth/login/aad`.
 
 ## Telemetry
 
@@ -358,6 +583,8 @@ npm test -- --run
 
 - **Serverless Cosmos and `--max-throughput`**: Do not pass `--max-throughput` when the Cosmos DB account uses serverless capacity mode. The SDK raises `TypeError` because serverless does not support provisioned throughput.
 - **Cosmos DB RBAC Forbidden (403)**: When using `--use-aad`, the caller needs the Cosmos DB Built-in Data Contributor role. See the Container Initialization for Azure Cosmos DB section for the assignment command.
+- **Cosmos DB RBAC 403 on database/container creation**: The Built-in Data Contributor role is a data-plane role that does not include `sqlDatabases/write` or `sqlContainers/write` permissions. Use `az cosmosdb sql database create` and `az cosmosdb sql container create` CLI commands instead. See the warning in the Container Initialization for Azure Cosmos DB section.
+- **GTC v2 ground truth schema**: When seeding ground truths via the API, items use a `history` array with `{"role": "user", "msg": "..."}` and `{"role": "assistant", "msg": "..."}` entries. Do not use top-level `question` and `answer` fields directly; those are derived from the history and plugins at read time. Sending `question`/`answer` as top-level fields produces a 422 validation error.
 - **Easy Auth returns 401 in browser**: See `infra/easy-auth-setup.md` in the repository. Common causes: missing client secret on the Container App, missing token store configuration, or the Container App's system-assigned identity lacking `Storage Blob Data Contributor` on the token store storage account.
 
 ## Cleanup

@@ -92,12 +92,32 @@ After importing draft items, open the GTC frontend and click **Request More** to
 3. Click **Request More** — this calls `POST /v1/assignments/self-serve` with `{ "limit": 10 }`.
 4. Draft items are assigned to you and appear in your queue for curation.
 
+## Authentication for Deployed Instances
+
+> [!IMPORTANT]
+> Never disable EasyAuth or set `GTC_AUTH_MODE=dev` on a deployed GTC instance to work around 401 errors. Always use Bearer tokens for programmatic access.
+
+When running against a deployed GTC instance with EasyAuth enabled, the seed script must authenticate. Acquire a token and pass it via the `--header` flag or set the `GTC_BEARER_TOKEN` environment variable (if supported by the script):
+
+```bash
+TOKEN=$(az account get-access-token --resource api://<appId> --query accessToken -o tsv)
+
+cd GroundTruthCurator/backend
+uv run python scripts/generate_gtc_sample_data.py \
+  --base-url "https://<gtc-fqdn>" \
+  --header "Authorization: Bearer $TOKEN"
+```
+
+If the script does not support a `--header` flag, use `curl` or `httpx` directly with the Bearer token to POST ground truth items to the `/v1/ground-truths/import` endpoint.
+
+The `api://<appId>` value is the Application ID URI of the GTC app registration. See the **gtc-install** skill for complete Entra ID app registration setup.
+
 ## Troubleshooting
 
 | Symptom                    | Fix                                                                           |
 | -------------------------- | ----------------------------------------------------------------------------- |
 | `ConnectionError`          | Confirm the GTC backend is running at the base URL.                           |
-| `401 Unauthorized`         | Ensure `AUTH_MODE=dev` or pass a valid `X-User-Id` header.                    |
+| `401 Unauthorized`         | If running locally without auth, ensure `GTC_AUTH_MODE=dev`. For deployed instances with EasyAuth, acquire a Bearer token: `TOKEN=$(az account get-access-token --resource api://<appId> --query accessToken -o tsv)` and pass `--header "Authorization: Bearer $TOKEN"`. Never disable EasyAuth as a workaround. |
 | `400 Bad Request`          | Items may have invalid tags. Check the tag schema via `GET /v1/tags/schema`.  |
 | Items not appearing in queue | Verify items are in `draft` status and unassigned (`assignedTo` is null).   |
 | `httpx` not found          | Run from the GTC backend directory with `uv run` to use project dependencies. |

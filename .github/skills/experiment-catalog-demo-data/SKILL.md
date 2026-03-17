@@ -82,10 +82,41 @@ Each permutation contains `--results` results (default 100). Each result has:
 
 ## Troubleshooting
 
-| Symptom                   | Fix                                                                                                   |
-| ------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `ConnectionError`         | Confirm the catalog backend is running and reachable at the base URL.                                 |
-| `400 Bad Request`         | The project or experiment may already exist. The script skips 409 conflicts but other errors surface. |
-| Missing `requests` module | Run `pip install requests`.                                                                           |
+| Symptom                                               | Fix                                                                                                                                                                                                                                                                                         |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ConnectionError`                                     | Confirm the catalog backend is running and reachable at the base URL.                                                                                                                                                                                                                       |
+| `400 Bad Request`                                     | The project or experiment may already exist. The script skips 409 conflicts but other errors surface.                                                                                                                                                                                       |
+| Missing `requests` module                             | Run `pip install requests`.                                                                                                                                                                                                                                                                 |
+| `401 Unauthorized`                                    | The catalog has authentication enabled. Acquire a Bearer token: `TOKEN=$(az account get-access-token --resource api://<appId> --query accessToken -o tsv)` and pass it with requests. Never disable OIDC or EasyAuth as a workaround. See the Authentication section below.                 |
+| `404` when posting results after running AML pipeline | The experiment must exist before the AML eval runner's catalog action can POST results. This script creates experiments automatically, but if you are using the catalog action without this script, create the experiment manually first. Both `name` and `hypothesis` fields are required. |
+
+## Authentication for Deployed Instances
+
+> [!IMPORTANT]
+> Never disable authentication on a deployed catalog instance to work around 401 errors. Always use Bearer tokens for programmatic access.
+
+When running against a deployed catalog with OIDC or EasyAuth enabled, the demo data script must authenticate. Acquire a token and pass it as a Bearer header:
+
+```bash
+TOKEN=$(az account get-access-token --resource api://<appId> --query accessToken -o tsv)
+
+python scripts/generate_demo_data.py \
+  --base-url "https://<catalog-fqdn>" \
+  --header "Authorization: Bearer $TOKEN"
+```
+
+If the script does not support a `--header` flag, modify the script's `requests.Session` to include the Authorization header, or use `curl` directly:
+
+```bash
+TOKEN=$(az account get-access-token --resource api://<appId> --query accessToken -o tsv)
+
+# Create project
+curl -X POST "https://<catalog-fqdn>/api/projects" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name": "sprint01"}'
+```
+
+The `api://<appId>` value is the Application ID URI of the catalog's Entra app registration. See the **experiment-catalog-install** skill's Authentication section for complete setup.
 
 > Brought to you by microsoft/experiment-catalog
