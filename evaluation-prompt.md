@@ -9,7 +9,7 @@ Deploy GTC, AML Evaluation Runner, and Experiment Catalog to a shared resource g
 
 ## Configuration
 
-- Resource group: `pelasne-eval-06`
+- Resource group: `pelasne-eval-10`
 - Clone all repos fresh (even if they exist locally)
 - Share Azure resources where possible (storage account, etc.)
 - Use OIDC auth for GTC and Experiment Catalog
@@ -27,7 +27,7 @@ Deploy GTC, AML Evaluation Runner, and Experiment Catalog to a shared resource g
 
 ### Azure resource group
 
-- [ ] Create resource group `pelasne-eval-09` (ask for region preference)
+- [ ] Create resource group `pelasne-eval-10` (ask for region preference)
 
 ### Shared Azure resources
 
@@ -152,7 +152,7 @@ Create at `aml-evaluation-runner/evaluation/demo-evaluation/`:
 
 ### Resource group and shared resources
 
-- [ ] `pelasne-eval-09` exists and contains all expected resources
+- [ ] `pelasne-eval-10` exists and contains all expected resources
 - [ ] Only one Storage Account is used across AML runner and Experiment Catalog
 - [ ] Key Vault and Log Analytics workspace are shared where applicable
 
