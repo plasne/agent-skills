@@ -176,7 +176,7 @@ If you ran a pipeline before creating the experiment, the eval output files are 
 ## Authentication for GTC and Catalog
 
 > [!IMPORTANT]
-> Never disable authentication on GTC or the experiment catalog to work around 401 errors during seeding or pipeline runs. Always acquire Bearer tokens for programmatic access.
+> Never disable authentication on GTC or the experiment catalog to work around 401 errors during seeding or pipeline runs. Always acquire Bearer tokens for programmatic access. Disabling auth — even temporarily — bypasses security controls and masks integration issues that must be resolved before production use.
 
 ### Seeding GTC with Auth Enabled
 
@@ -194,7 +194,7 @@ Use this token when calling the GTC API to export ground truths or verify data.
 When the experiment catalog has OIDC or EasyAuth enabled, the catalog action in the AML pipeline must authenticate. Set these env vars in `.exp.env`:
 
 ```dotenv
-EVAL_SET_CATALOG_URL=https://<catalog-fqdn>
+EVAL_SET_CATALOG_URL=https://<catalog-fqdn>/api
 EVAL_SET_CATALOG_PROJECT=<project-name>
 EVAL_SET_CATALOG_API_APP_ID_URI=api://<catalog-appId>
 ```
@@ -206,6 +206,48 @@ For managed identity access to work:
 1. The catalog app registration must have an **Application-type app role** (delegated scopes are not sufficient for the client credentials flow).
 2. The managed identity's service principal must be assigned that app role via the Graph API.
 3. The catalog's `OIDC_AUDIENCES` must include both the raw `appId` and the `api://` URI format.
+
+#### Creating an App Role and Assigning It to the Compute MI
+
+Create an application-scoped app role on the catalog registration:
+
+```bash
+# Get the catalog app's object ID (not appId)
+APP_OBJECT_ID=$(az ad app show --id <catalog-appId> --query id -o tsv)
+
+# Add an Application-type app role
+az rest --method PATCH \
+  --url "https://graph.microsoft.com/v1.0/applications/$APP_OBJECT_ID" \
+  --body '{
+    "appRoles": [{
+      "id": "<generate-a-guid>",
+      "allowedMemberTypes": ["Application"],
+      "displayName": "Catalog.ReadWrite.All",
+      "description": "Read and write catalog data",
+      "value": "Catalog.ReadWrite.All",
+      "isEnabled": true
+    }]
+  }'
+```
+
+Assign the app role to the compute managed identity's service principal:
+
+```bash
+# Get the catalog's service principal object ID
+CATALOG_SP_ID=$(az ad sp show --id <catalog-appId> --query id -o tsv)
+
+# Get the compute MI's service principal object ID
+COMPUTE_MI_SP_ID=$(az ad sp show --id <compute-mi-client-id> --query id -o tsv)
+
+# Assign the app role
+az rest --method POST \
+  --url "https://graph.microsoft.com/v1.0/servicePrincipals/$COMPUTE_MI_SP_ID/appRoleAssignments" \
+  --body "{
+    \"principalId\": \"$COMPUTE_MI_SP_ID\",
+    \"resourceId\": \"$CATALOG_SP_ID\",
+    \"appRoleId\": \"<the-role-id-from-above>\"
+  }"
+```
 
 ### Pre-Creating Experiments with Auth
 
@@ -224,6 +266,103 @@ curl -X POST "https://<catalog-fqdn>/api/projects/<PROJECT_NAME>/experiments" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"name": "<EXPERIMENT_NAME>", "hypothesis": "<DESCRIPTION>"}'
 ```
+
+### Troubleshooting Auth Errors
+
+| Error                                                      | Cause                                                                                         | Fix                                                                                                                         |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `AADSTS50011` redirect URI mismatch                        | The catalog's OIDC callback URL is not registered in the app registration.                    | Add `https://<catalog-fqdn>/auth/callback` to the app's web redirect URIs via `az ad app update --web-redirect-uris`.       |
+| `AADSTS7000218` client_assertion or client_secret required | The OIDC authorization code flow requires a client secret for the token exchange.             | Create a client secret via `az rest --method POST --url .../addPassword` and set `OIDC_CLIENT_SECRET` on the container app. |
+| `AADSTS7000215` invalid client secret                      | Wrong secret value — ensure you use `secretText`, not `keyId`.                                | Verify the env var contains the actual secret string returned by the addPassword call.                                      |
+| 401 from catalog when posting pipeline results             | `EVAL_SET_CATALOG_API_APP_ID_URI` is not set, or the compute MI lacks an app role assignment. | Set the env var and create the app role + assignment per the steps above.                                                   |
+
+## Result Ref Format
+
+The catalog action in `run_evaluation.py` constructs a `ref` field for each result posted to the catalog. The ref identifies which ground truth item a result belongs to.
+
+> [!IMPORTANT]
+> All iterations of the same ground truth item must share the same `ref`. For example, if ground truth `gt-000` is evaluated across 5 iterations, all 5 results must use `ref: "gt-000"` — not `gt-000_0`, `gt-000_1`, etc. The catalog uses the ref to group iterations and compute aggregated statistics (mean, standard deviation). Appending the iteration index creates unique refs that prevent aggregation.
+
+The `ref` is constructed in `code/actions/catalog.py`:
+
+```python
+# Correct — use the ground truth ID as the ref without iteration suffix
+id = job_details.get("ground_truth_ref")
+```
+
+Do not append the iteration index to the ref. The catalog tracks iterations implicitly through multiple results sharing the same ref within a set.
+
+## Set Annotations
+
+Each permutation (set) in the catalog is identified by its timestamp (for example, `20260317143738`). Without additional context, it is difficult to determine which configuration produced which set. Use annotations to label sets with their permutation details.
+
+Post an annotation-only result to the catalog after submitting each pipeline run:
+
+```bash
+TOKEN=$(az account get-access-token --resource api://<catalog-appId> --query accessToken -o tsv)
+
+curl -X POST "https://<catalog-fqdn>/api/projects/<PROJECT>/experiments/<EXPERIMENT>/results" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{
+    "set": "<TIMESTAMP>",
+    "annotations": [
+      {"text": "config: baseline"},
+      {"text": "perturbation_level: 1"},
+      {"text": "description: Default parameters with minimal perturbation"}
+    ]
+  }'
+```
+
+The catalog accepts results with only `set` and `annotations` (no ref or metrics required). This attaches descriptive metadata to the set visible in the catalog UI.
+
+Consider automating this in the pipeline submission script or as a post-pipeline step. The `AML_CONFIG_TAG_NAME` value from `.exp.env` is a natural source for the annotation text.
+
+## Tags for Data Subsetting
+
+The catalog supports project-level tags that map tag names to lists of result refs. Tags enable filtering results by subsets (for example, by question type, difficulty, or domain) in compare and analysis views.
+
+Create tags after the pipeline completes:
+
+```bash
+TOKEN=$(az account get-access-token --resource api://<catalog-appId> --query accessToken -o tsv)
+
+# Tag refs by category
+curl -X PUT "https://<catalog-fqdn>/api/projects/<PROJECT>/tags" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '[{"name": "single-turn", "refs": ["gt-000", "gt-001", "gt-002"]},
+      {"name": "multi-turn", "refs": ["gt-050", "gt-051"]},
+      {"name": "retrieval", "refs": ["gt-000", "gt-010", "gt-020"]}]'
+```
+
+Tags can be derived from the ground truth metadata. GTC v2 ground truths include `manualTags` and `computedTags` fields that can be mapped to catalog tags. For example, build a tag mapping script that:
+
+1. Reads each ground truth file from the jobinput container.
+2. Extracts the `id` (used as the catalog ref) and `manualTags` / `computedTags`.
+3. Groups refs by tag value.
+4. PUTs the grouped tags to the catalog.
+
+Filtering by tags is available on the compare endpoint:
+
+```text
+GET /api/projects/<PROJECT>/experiments/<EXPERIMENT>/compare?include-tags=single-turn&exclude-tags=multi-turn
+```
+
+## Metric Definition Aggregation Functions
+
+When creating metric definitions in the catalog, choose the correct `aggregate_function` for each metric type:
+
+| Aggregate Function | Use When                                       | Values Expected                |
+| ------------------ | ---------------------------------------------- | ------------------------------ |
+| `Average`          | Continuous float metrics (most common)         | Floats in a defined range      |
+| `Count`            | Counting occurrences                           | Integers ≥ 0                   |
+| `Accuracy`         | Classification accuracy from confusion matrix  | `t+`, `t-`, `f+`, `f-` strings |
+| `Precision`        | Classification precision from confusion matrix | `t+`, `t-`, `f+`, `f-` strings |
+| `Recall`           | Classification recall from confusion matrix    | `t+`, `t-`, `f+`, `f-` strings |
+
+> [!IMPORTANT]
+> Do not use `Accuracy`, `Precision`, or `Recall` aggregation for continuous float metrics. These functions expect classification outcomes (`t+`, `t-`, `f+`, `f-`) and silently produce zeros when given floats. Use `Average` for any metric that produces a continuous value in a range like 0–1.
 
 ## Troubleshooting
 

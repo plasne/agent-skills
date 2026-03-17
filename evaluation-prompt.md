@@ -64,6 +64,10 @@ Deploy GTC, AML Evaluation Runner, and Experiment Catalog to a shared resource g
 - [ ] Enable Managed Identity on the hosting solution
 - [ ] Assign `Storage Blob Data Contributor` to the managed identity on the shared storage account
 - [ ] Configure OIDC authentication on the Experiment Catalog
+- [ ] Register both `/auth/callback` and `/.auth/login/aad/callback` as redirect URIs on the catalog app registration
+- [ ] Create a client secret on the catalog app registration and set `OIDC_CLIENT_SECRET` on the container app
+- [ ] Create an Application-type app role on the catalog app registration (for MI access from AML compute)
+- [ ] Assign the app role to the compute cluster's managed identity service principal via Graph API
 - [ ] Set `INCLUDE_CREDENTIAL_TYPES=mi` and `AZURE_STORAGE_ACCOUNT_NAME` in catalog config
 
 ### Ground truth data
@@ -138,6 +142,7 @@ Create at `aml-evaluation-runner/evaluation/demo-evaluation/`:
 - [ ] Create a project in the catalog (with Bearer token auth)
 - [ ] Create the experiment under that project (both `name` and `hypothesis` required; name must match `AML_EXPERIMENT_NAME`)
 - [ ] Create metric definitions for all 25 metrics with appropriate ranges, aggregates, and display order
+  - Use `Average` aggregate for all continuous float metrics (do NOT use `Accuracy`, `Precision`, or `Recall` — those expect classification `t+/t-/f+/f-` values)
 - [ ] Set the baseline permutation
 
 ### Build and run
@@ -147,6 +152,11 @@ Create at `aml-evaluation-runner/evaluation/demo-evaluation/`:
 - [ ] Submit the AML pipeline run (`uv run python run.py --env_path .exp.env`)
 - [ ] Monitor pipeline until all 3 steps complete (batch_inference, batch_eval, batch_summarization)
 - [ ] If any step fails, retrieve logs via `az storage blob download --auth-mode login` (not `az ml job download`)
+
+### Post-pipeline annotation and tagging
+
+- [ ] Post annotations to each set identifying the permutation (for example, `config: baseline`, `config: temperature-0.7`)
+- [ ] Create project-level tags mapping ground truth refs to categories (for example, `single-turn`, `multi-turn`, `retrieval`) for subset filtering
 
 ## Validation Checklist
 
@@ -225,6 +235,9 @@ Create at `aml-evaluation-runner/evaluation/demo-evaluation/`:
 - [ ] Each of the 4 permutations has results in the catalog
 - [ ] Each result contains all 25 metrics
 - [ ] 5 iterations were executed per permutation
+- [ ] Result refs use the ground truth ID without iteration suffix (for example, `gt-000` appears 5 times per set, not `gt-000_0` through `gt-000_4`)
 - [ ] Total result records: 4 permutations × 5 iterations × 100 ground truths = 2,000
 - [ ] Results are viewable in the catalog UI
 - [ ] Metric values vary across permutations (not all 0 or all 1)
+- [ ] Each set has annotations identifying its permutation configuration
+- [ ] Project-level tags exist and enable subset filtering in compare views
