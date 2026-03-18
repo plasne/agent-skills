@@ -7,6 +7,8 @@ description: Deploy demo inference and evaluation modules for the AML Evaluation
 
 Deploy a pair of demo plug-in modules — inference and evaluation — that let you run the AML Evaluation Runner pipeline end-to-end without any API keys, model endpoints, or heavy dependencies. The demo modules accept ground truth records in the GTC v2 snapshot format and produce deterministic metrics using only the Python standard library.
 
+When orchestrating multi-tool deployments, delegate demo module setup and pipeline execution to a sub-agent that reads this skill file first. This keeps the parent conversation context focused and makes this skill portable across repos.
+
 ## Prerequisites
 
 - Python 3.10 or later.
@@ -128,17 +130,47 @@ No network calls. No API keys. No pip packages beyond the standard library.
 
 Folder: `aml-evaluation-runner/evaluation/demo-evaluation/`
 
-A single `eval.py` with a `run_eval` function that computes:
+A single `eval.py` with a `run_eval` function that computes 25 metrics organized by prefix:
 
-| Metric                   | Range  | Description                                                |
-| ------------------------ | ------ | ---------------------------------------------------------- |
-| `answer_similarity`      | 0 – 1  | SequenceMatcher ratio between expected and actual answers. |
-| `word_overlap_f1`        | 0 – 1  | Token-level F1 score (precision × recall harmonic mean).   |
-| `answer_length_ratio`    | 0 – 2  | Ratio of actual to expected answer length (word count).    |
-| `has_answer`             | 0 or 1 | Binary flag: did inference produce a non-empty response?   |
-| `meta_inference_time_ms` | ≥ 0    | Inference latency from the inference step.                 |
-| `meta_prompt_tokens`     | ≥ 0    | Input token count from inference usage.                    |
-| `meta_completion_tokens` | ≥ 0    | Output token count from inference usage.                   |
+**Retrieval metrics (10):**
+
+| Metric                        | Range  | Description                                     |
+| ----------------------------- | ------ | ----------------------------------------------- |
+| `retrieval_accuracy`          | 0 – 1  | Correctness of retrieved documents.             |
+| `retrieval_precision`         | 0 – 1  | Fraction of retrieved docs that are relevant.   |
+| `retrieval_recall`            | 0 – 1  | Fraction of relevant docs that were retrieved.  |
+| `retrieval_f1`                | 0 – 1  | Harmonic mean of precision and recall.          |
+| `retrieval_mrr`               | 0 – 1  | Mean reciprocal rank of first relevant result.  |
+| `retrieval_ndcg`              | 0 – 1  | Normalized discounted cumulative gain.          |
+| `retrieval_map`               | 0 – 1  | Mean average precision.                         |
+| `retrieval_hit_rate`          | 0 or 1 | Did at least one relevant result appear?        |
+| `retrieval_context_relevance` | 0 – 1  | Relevance of retrieved context to the question. |
+| `retrieval_chunk_utilization` | 0 – 1  | Fraction of retrieved chunks actually used.     |
+
+**Generation metrics (10):**
+
+| Metric                         | Range | Description                                                |
+| ------------------------------ | ----- | ---------------------------------------------------------- |
+| `generation_correctness`       | 0 – 1 | Factual correctness of the answer.                         |
+| `generation_faithfulness`      | 0 – 1 | Answer grounded in provided context.                       |
+| `generation_completeness`      | 0 – 1 | Coverage of all expected answer points.                    |
+| `generation_coherence`         | 0 – 1 | Logical flow and readability.                              |
+| `generation_relevance`         | 0 – 1 | Answer relevance to the question.                          |
+| `generation_conciseness`       | 0 – 1 | Absence of unnecessary verbosity.                          |
+| `generation_fluency`           | 0 – 1 | Grammatical quality and naturalness.                       |
+| `generation_toxicity`          | 0 – 1 | Absence of harmful content (higher is better).             |
+| `generation_answer_similarity` | 0 – 1 | SequenceMatcher ratio between expected and actual answers. |
+| `generation_word_overlap_f1`   | 0 – 1 | Token-level F1 score (precision × recall harmonic mean).   |
+
+**Metadata metrics (5):**
+
+| Metric                         | Range  | Description                                             |
+| ------------------------------ | ------ | ------------------------------------------------------- |
+| `metadata_inference_time_ms`   | ≥ 0    | Inference latency in milliseconds.                      |
+| `metadata_prompt_tokens`       | ≥ 0    | Input token count from inference usage.                 |
+| `metadata_completion_tokens`   | ≥ 0    | Output token count from inference usage.                |
+| `metadata_answer_length_ratio` | 0 – 2  | Ratio of actual to expected answer length (word count). |
+| `metadata_has_answer`          | 0 or 1 | Did inference produce a non-empty response?             |
 
 No network calls. No API keys. No pip packages beyond the standard library.
 
@@ -170,6 +202,55 @@ curl -X POST "<CATALOG_URL>/projects/<PROJECT>/experiments" \
 ```
 
 Both `name` and `hypothesis` are required fields. The `name` value must match the `AML_EXPERIMENT_NAME` in your `.exp.env` file (this becomes the `CATALOG_EXPERIMENT_NAME` at runtime).
+
+### Metric Definitions
+
+Create metric definitions in the catalog before submitting the pipeline so results display correctly. Each definition specifies the metric name, value range, aggregation function, and display order:
+
+```bash
+TOKEN=$(az account get-access-token --resource api://<catalog-appId> --query accessToken -o tsv)
+
+curl -X POST "<CATALOG_URL>/api/projects/<PROJECT>/metric-definitions" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name": "retrieval_accuracy", "range": "0-1", "aggregate": "Average", "order": 100}'
+```
+
+Repeat for each metric. Use `Average` aggregate for all continuous float metrics. Use sequential `order` values to control column display order (for example, `retrieval_` metrics at 100–190, `generation_` at 200–290, `metadata_` at 300–340). See the Metric Definition Aggregation Functions section for aggregate function guidance.
+
+### Setting the Baseline
+
+After the first permutation's pipeline run completes, set it as the baseline so the catalog can compute deltas for subsequent permutations:
+
+```bash
+curl -X PUT "<CATALOG_URL>/api/projects/<PROJECT>/experiments/<EXPERIMENT>/baseline" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"set": "<TIMESTAMP>"}'
+```
+
+The `<TIMESTAMP>` is the set ID from the first pipeline run (for example, `20260317143738`).
+
+## Running Multiple Permutations
+
+To compare different configurations, run the pipeline once per permutation with different parameters. The typical workflow:
+
+1. Create a separate `.env` file for each permutation (for example, `.baseline.env`, `.temp07.env`, `.topk10.env`, `.prompt-v2.env`).
+2. Each file shares the same base configuration but overrides specific parameters via `INF_OVERRIDE_*` or `EVAL_OVERRIDE_*` variables.
+3. Use a different `AML_CONFIG_TAG_NAME` in each file to distinguish runs in AML Studio.
+4. Submit the pipeline once per permutation:
+
+   ```bash
+   cd aml-evaluation-runner/experiment
+   uv run python run.py --env_path .baseline.env
+   # Wait for completion, then:
+   uv run python run.py --env_path .temp07.env
+   # Repeat for each permutation
+   ```
+
+5. The catalog action creates a new set (identified by timestamp) for each submission.
+6. After the first permutation completes, set it as the baseline (see Setting the Baseline above).
+7. Post annotations to each set to identify its configuration (see Set Annotations below).
 
 If you ran a pipeline before creating the experiment, the eval output files are still available in the `joboutput` storage container at `<experiment>/<timestamp>/eval/`. You can replay them without re-running the pipeline by downloading each eval JSON and POSTing its `$metrics` to the catalog.
 
@@ -327,13 +408,21 @@ Create tags after the pipeline completes:
 ```bash
 TOKEN=$(az account get-access-token --resource api://<catalog-appId> --query accessToken -o tsv)
 
-# Tag refs by category
+# Create each tag individually — PUT /tags accepts a single Tag object, not an array
 curl -X PUT "https://<catalog-fqdn>/api/projects/<PROJECT>/tags" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '[{"name": "single-turn", "refs": ["gt-000", "gt-001", "gt-002"]},
-      {"name": "multi-turn", "refs": ["gt-050", "gt-051"]},
-      {"name": "retrieval", "refs": ["gt-000", "gt-010", "gt-020"]}]'
+  -d '{"name": "single-turn", "refs": ["gt-000", "gt-001", "gt-002"]}'
+
+curl -X PUT "https://<catalog-fqdn>/api/projects/<PROJECT>/tags" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name": "multi-turn", "refs": ["gt-050", "gt-051"]}'
+
+curl -X PUT "https://<catalog-fqdn>/api/projects/<PROJECT>/tags" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"name": "retrieval", "refs": ["gt-000", "gt-010", "gt-020"]}'
 ```
 
 Tags can be derived from the ground truth metadata. GTC v2 ground truths include `manualTags` and `computedTags` fields that can be mapped to catalog tags. For example, build a tag mapping script that:
@@ -341,7 +430,7 @@ Tags can be derived from the ground truth metadata. GTC v2 ground truths include
 1. Reads each ground truth file from the jobinput container.
 2. Extracts the `id` (used as the catalog ref) and `manualTags` / `computedTags`.
 3. Groups refs by tag value.
-4. PUTs the grouped tags to the catalog.
+4. PUTs each tag individually to the catalog (the API accepts a single Tag object per request, not an array).
 
 Filtering by tags is available on the compare endpoint:
 

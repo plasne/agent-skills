@@ -16,6 +16,8 @@ This skill targets users who have never used the experiment catalog. They may no
 
 - Never assume you know what to name something or what settings to use. Always ask the user for preferences and guidance on naming, configuration options, and deployment choices.
 
+- When orchestrating multi-tool deployments, delegate Experiment Catalog installation to a sub-agent that reads this skill file first. This keeps the parent conversation context focused and makes this skill portable across repos.
+
 ## Source Code
 
 The experiment catalog is available on GitHub at: <https://github.com/plasne/experiment-catalog>.
@@ -133,7 +135,7 @@ PORT=<desired-port>
 
 ## What resources are used for
 
-- Azure Storage Account: This is used to store all experiments. Each experiment will be a container.
+- Azure Storage Account: This is used to store all experiments. Each experiment will be a container. When deploying alongside the AML Evaluation Runner, this can be the same storage account used by the runner's datastores.
 - Container hosting solution: This is used to run the experiment catalog application which provides the API and UI for interacting with the experiments stored in Azure Storage.
 
 ## UI
@@ -210,7 +212,7 @@ The catalog does not have authorization levels — either a user can do everythi
 When deploying with OIDC auth using Entra ID, follow the setup guide in the catalog's [auth.md](https://github.com/plasne/experiment-catalog/blob/main/catalog/auth.md#microsoft-entra-id-setup). The key steps are:
 
 1. Create an Entra ID app registration and service principal.
-2. Add a Web redirect URI for `https://<catalog-fqdn>/auth/callback` (required for the browser login flow).
+2. Add a Web redirect URI for `https://<catalog-fqdn>/auth/callback` (required for the browser login flow). If EasyAuth is also configured (Container Apps), register `https://<catalog-fqdn>/.auth/login/aad/callback` as a second redirect URI so both OIDC and EasyAuth callbacks work.
 3. Set `OIDC_AUTHORITY`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_AUDIENCES` on the catalog host.
 4. If managed identities or service principals need access, create an Application-type app role and assign it via the Graph API (delegated scopes are not sufficient for the client credentials flow).
 

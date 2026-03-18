@@ -16,6 +16,8 @@ This skill targets users who have never used the Ground Truth Curator. They may 
 
 - Never assume you know what to name something or what settings to use. Always ask the user for preferences and guidance on naming, configuration options, and deployment choices.
 
+- When orchestrating multi-tool deployments, delegate GTC tasks to a sub-agent that reads this skill file first. This keeps the parent conversation context focused and makes this skill portable across repos.
+
 ## Source Code
 
 The Ground Truth Curator is available on GitHub at: <https://github.com/andrewDoing/GroundTruthCurator>.
@@ -504,7 +506,18 @@ For service-to-service access (for example, AML compute calling the GTC API), th
 
 ### Container Apps EasyAuth Behavior
 
-Container Apps EasyAuth returns `401` (not `302`) for unauthenticated API requests, even from browsers. The `/.auth/login/aad` endpoint handles the actual browser redirect. Frontend code should detect `401` responses and redirect to `/.auth/login/aad`.
+With `unauthenticatedClientAction: RedirectToLoginPage`, browser requests (Accept: text/html) receive a 302 redirect to the login page. API-style requests (XHR, Accept: application/json) still receive 401. Frontend code should detect 401 responses and redirect to `/.auth/login/aad`.
+
+If `unauthenticatedClientAction` is set to `Return401` (the default), **all** unauthenticated requests get 401 — including browser navigation. This prevents the login flow from starting. Always set it to `RedirectToLoginPage` for applications with browser-based login.
+
+### Admin Consent Limitations
+
+When admin consent cannot be granted (common in non-production tenants):
+
+- Browser-based EasyAuth login still works for interactive users.
+- For programmatic API access, use client credentials flow with Application-type app roles instead of delegated permissions.
+- Pre-authorize Azure CLI (`04b07795-8ddb-461a-bbee-02f9e1bf7b46`) on the app registration to enable `az account get-access-token` without admin consent.
+- For GTC ground truths, generate them directly in the expected format rather than exporting via the GTC API.
 
 ## Telemetry
 
@@ -585,7 +598,33 @@ npm test -- --run
 - **Cosmos DB RBAC Forbidden (403)**: When using `--use-aad`, the caller needs the Cosmos DB Built-in Data Contributor role. See the Container Initialization for Azure Cosmos DB section for the assignment command.
 - **Cosmos DB RBAC 403 on database/container creation**: The Built-in Data Contributor role is a data-plane role that does not include `sqlDatabases/write` or `sqlContainers/write` permissions. Use `az cosmosdb sql database create` and `az cosmosdb sql container create` CLI commands instead. See the warning in the Container Initialization for Azure Cosmos DB section.
 - **GTC v2 ground truth schema**: When seeding ground truths via the API, items use a `history` array with `{"role": "user", "msg": "..."}` and `{"role": "assistant", "msg": "..."}` entries. Do not use top-level `question` and `answer` fields directly; those are derived from the history and plugins at read time. Sending `question`/`answer` as top-level fields produces a 422 validation error.
-- **Easy Auth returns 401 in browser**: See `infra/easy-auth-setup.md` in the repository. Common causes: missing client secret on the Container App, missing token store configuration, or the Container App's system-assigned identity lacking `Storage Blob Data Contributor` on the token store storage account.
+- **EasyAuth login redirect not working (401 instead of redirect)**: The `unauthenticatedClientAction` on the Container App must be `RedirectToLoginPage`, not `Return401`. With `Return401`, browsers receive a raw 401 without any redirect to the login page. Fix with:
+
+  ```bash
+  az containerapp auth update \
+    --name <app> --resource-group <rg> \
+    --unauthenticated-client-action RedirectToLoginPage
+  ```
+
+- **EasyAuth callback returns 401 after redirect**: The app registration needs Microsoft Graph delegated permissions (`openid`, `profile`, `User.Read`) for the login callback to complete the token exchange. Also ensure ID token issuance is enabled on the app registration (`az ad app update --id <appId> --enable-id-token-issuance true`).
+
+- **EasyAuth callback fails with stale or mismatched client secret**: The client secret configured on the Container App must match the current secret on the app registration. If the secret was rotated or expired, update it:
+
+  ```bash
+  # Rotate the secret (reduce --end-date if tenant policy restricts lifetime)
+  az ad app credential reset --id <appId> --display-name "EasyAuth" \
+    --end-date "$(date -u -v+30d +%Y-%m-%dT%H:%M:%SZ)"
+
+  # Update the Container App secret
+  az containerapp secret set --name <app> --resource-group <rg> \
+    --secrets "<secret-name>=<new-secret-value>"
+
+  # Restart the active revision
+  az containerapp revision restart --name <app> --resource-group <rg> \
+    --revision <active-revision>
+  ```
+
+- **Credential lifetime exceeds max value**: Some tenants restrict credential lifetimes. Reduce `--end-date` incrementally (180d → 90d → 30d → 7d) until within policy limits.
 
 ## Cleanup
 

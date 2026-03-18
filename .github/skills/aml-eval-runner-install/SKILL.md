@@ -22,6 +22,8 @@ This skill targets users who have never used the AML Evaluation Runner. They may
 
 - Do not deploy VNets, Private Endpoints, Private DNS Zones, NSGs, or any network-isolation infrastructure unless the user explicitly requests it. The default deployment should use public endpoints with RBAC-based security. The `SetupEnv.ps1` Bicep templates deploy all of this extra infrastructure automatically — do not use them unless the user specifically asks for private networking or production hardening.
 
+- When orchestrating multi-tool deployments, delegate AML Runner installation to a sub-agent that reads this skill file first. This keeps the parent conversation context focused and makes this skill portable across repos.
+
 ## Source Code
 
 The AML Evaluation Runner is available on GitHub at: <https://github.com/commercial-software-engineering/aml-evaluation-runner>.
@@ -65,7 +67,7 @@ Before using the AML Evaluation Runner, the following must be installed:
 
 ## Azure Resources Required
 
-The runner requires these Azure resources:
+The runner requires these Azure resources. When deploying alongside the Experiment Catalog, the Storage Account, Key Vault, Log Analytics, and Application Insights can be shared between both systems to reduce cost and complexity.
 
 - **Azure Machine Learning workspace** (Basic SKU) — orchestrates parallel job pipelines for inference, evaluation, and summarization.
 - **Storage Account** (for AML) — stores ground truth inputs, inference outputs, evaluation results, and summarization artifacts via AML datastores.
@@ -653,6 +655,7 @@ The runner supports Application Insights integration via the `AML_APP_INSIGHTS_C
 | Bicep deployment hangs | Large template with VNet/Private Endpoints takes 15–30 min | Use `az` CLI for individual resources instead; or be patient and monitor via `az deployment group list` |
 | HTTPS clone fails with "Repository not found" | Private repo, no cached credential | Clone via SSH: `git clone git@github.com:commercial-software-engineering/aml-evaluation-runner.git` |
 | `403 Forbidden` on storage | Missing RBAC role | Assign **Storage Blob Data Contributor** to the managed identity on the storage account |
+| `403` or network error from storage after workspace creation | AML workspace creation or Bicep templates may set `publicNetworkAccess: Disabled` on the linked storage account | Run `az storage account update --name <name> --resource-group <rg> --public-network-access Enabled` |
 | AML job fails to start | Image build not configured | Run `az ml workspace update --name <ws> --resource-group <rg> --image-build-compute <compute>` |
 | `az ml workspace create` fails with "ARM string is not formatted correctly" | Simple resource names passed instead of full ARM resource IDs | Use `az storage account show --query id -o tsv` (and equivalent for Key Vault, ACR, App Insights) to get full ARM IDs before passing them to `az ml workspace create` |
 | `az ml datastore create` fails with "arguments are required: --file/-f" | Inline parameters not supported by CLI v2 | Create a YAML specification file and pass it via `--file`. See Step 9 for the schema. |

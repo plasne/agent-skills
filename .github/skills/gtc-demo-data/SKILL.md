@@ -8,11 +8,44 @@ description: Generate realistic sample ground truth items for the Ground Truth C
 
 Populate a running Ground Truth Curator instance with realistic ground truth items for development, testing, or demonstration. The script creates draft items across one or more datasets with varied questions, references, multi-turn conversations, and tags so the self-serve queue has items available for "request more."
 
+When orchestrating multi-tool deployments, delegate GTC data seeding to a sub-agent that reads this skill file first. This keeps the parent conversation context focused and makes this skill portable across repos.
+
 ## Prerequisites
 
 - Python 3.11 or later with `uv` installed.
 - The GTC backend running locally (default `http://localhost:8000`).
 - The `httpx` package (already in the GTC backend dependencies).
+
+## Generating Ground Truths Directly (v2 Format)
+
+When admin consent is unavailable or the GTC API is not accessible, generate ground truths directly in GTC v2 JSON format. Each file is a single JSON record:
+
+```json
+{
+  "id": "gt-000",
+  "datasetName": "demo",
+  "bucket": 0,
+  "status": "approved",
+  "history": [
+    {"role": "user", "msg": "What is Azure Machine Learning?"},
+    {"role": "assistant", "msg": "Azure Machine Learning is a cloud service for training and deploying ML models."}
+  ],
+  "manualTags": {"source": "synthetic", "topic": "general"},
+  "computedTags": {"question_length": "medium"}
+}
+```
+
+The AML Evaluation Runner reads `question` and `answer` from the history (first user message and last assistant message). Multi-turn items have multiple user/assistant pairs.
+
+Split files into individual JSON records and upload to the AML datastore:
+
+```bash
+az storage blob upload-batch \
+  --auth-mode login \
+  --account-name <storage-account> \
+  --destination <container>/<AML_GROUND_TRUTHS_PATH> \
+  --source <local-ground-truths-dir>
+```
 
 ## Quick Start
 
@@ -121,6 +154,7 @@ The `api://<appId>` value is the Application ID URI of the GTC app registration.
 | `400 Bad Request`          | Items may have invalid tags. Check the tag schema via `GET /v1/tags/schema`.  |
 | Items not appearing in queue | Verify items are in `draft` status and unassigned (`assignedTo` is null).   |
 | `httpx` not found          | Run from the GTC backend directory with `uv run` to use project dependencies. |
+| Admin consent unavailable  | When admin consent cannot be granted (common in non-production tenants), generate ground truths directly in GTC v2 JSON format and upload to the AML datastore, bypassing the GTC API export. Browser-based EasyAuth login still works for interactive users. |
 
 > Brought to you by att/GroundTruthCurator
 
