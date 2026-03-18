@@ -4,11 +4,21 @@ name: generate-gtc-data
 description: Generate realistic sample ground truth items for the Ground Truth Curator so SMEs can test the self-serve queue and "request more" workflow.
 ---
 
+## Delegation Requirement
+
+> [!IMPORTANT]
+> **Do not execute tasks from this skill directly.** Every discrete task you
+> derive from this skill must be delegated to its own sub-agent. Each sub-agent
+> should be given this skill file's path so it can read the full instructions
+> itself.
+>
+> For example, if the user asks to "add 100 approved and 100 draft ground
+> truths," that is one task for a sub-agent. If there are other tasks (deploying
+> GTC, running the pipeline), those are separate sub-agents.
+
 # Generate GTC Sample Data
 
 Populate a running Ground Truth Curator instance with realistic ground truth items for development, testing, or demonstration. The script creates draft items across one or more datasets with varied questions, references, multi-turn conversations, and tags so the self-serve queue has items available for "request more."
-
-IMPORTANT: All tasks should be delegated to sub-agents.
 
 ## Prerequisites
 

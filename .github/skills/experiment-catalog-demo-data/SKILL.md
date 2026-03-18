@@ -3,11 +3,21 @@ name: experiment-catalog-demo-data
 description: Generate realistic demo data for the experiment catalog including projects, experiments, permutations, results with metrics, metric definitions, and tags.
 ---
 
+## Delegation Requirement
+
+> [!IMPORTANT]
+> **Do not execute tasks from this skill directly.** Every discrete task you
+> derive from this skill must be delegated to its own sub-agent. Each sub-agent
+> should be given this skill file's path so it can read the full instructions
+> itself.
+>
+> For example, if the user asks to "populate the catalog with demo data," that
+> is one task for a sub-agent. If there are other tasks (deploying the catalog,
+> running a pipeline), those are separate sub-agents.
+
 # Generate Demo Data
 
 Populate a running experiment catalog instance with realistic demo data for development, testing, or demonstration purposes. The script creates two projects, multiple experiments per project with different hypotheses, several permutations (sets) per experiment, hundreds of results per permutation, metric definitions, and tags applied to refs.
-
-IMPORTANT: All tasks should be delegated to sub-agents.
 
 ## Prerequisites
 

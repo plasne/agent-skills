@@ -4,6 +4,19 @@ name: gtc-install
 description: Clone, build, and run the Ground Truth Curator (andrewDoing/GroundTruthCurator). Starts the Cosmos DB Emulator, initializes containers, builds the Python backend and React frontend, and runs in consolidated or development mode. Trigger phrases include "install GTC", "run ground truth curator", "GTC", "GTC dev setup".
 ---
 
+## Delegation Requirement
+
+> [!IMPORTANT]
+> **Do not execute tasks from this skill directly.** Every discrete task you
+> derive from this skill must be delegated to its own sub-agent. Each sub-agent
+> should be given this skill file's path so it can read the full instructions
+> itself.
+>
+> For example, if the user asks you to "deploy GTC and add ground truths," that
+> is two tasks — one sub-agent to deploy GTC, and a separate sub-agent to add
+> ground truths. Break the work into logical tasks and run each in its own
+> sub-agent.
+
 # Ground Truth Curator Installation
 
 The Ground Truth Curator is an open-source platform for subject-matter experts to create and maintain high-quality ground truth datasets for agent evaluation and model accuracy measurement. It provides a structured workflow for curating question-answer pairs, tagging, assignment management, and export.
@@ -15,8 +28,6 @@ This skill targets users who have never used the Ground Truth Curator. They may 
 - Never just stub things out in the configuration, provision everything the user asks for with the appropriate permissions and settings to make it work.
 
 - Never assume you know what to name something or what settings to use. Always ask the user for preferences and guidance on naming, configuration options, and deployment choices.
-
-- All tasks should be delegated to sub-agents.
 
 ## Source Code
 

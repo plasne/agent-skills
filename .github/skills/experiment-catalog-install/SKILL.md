@@ -4,6 +4,18 @@ name: experiment-catalog-install
 description: Clone, build, and run the Experiment Catalog (plasne/experiment-catalog) locally or in Azure. Provisions an Azure Storage Account, builds the .NET backend and Svelte UI, and starts in the solution. Trigger phrases include "install experiment catalog", "run experiment catalog", "experiment catalog", "experiment catalog dev setup".
 ---
 
+## Delegation Requirement
+
+> [!IMPORTANT]
+> **Do not execute tasks from this skill directly.** Every discrete task you
+> derive from this skill must be delegated to its own sub-agent. Each sub-agent
+> should be given this skill file's path so it can read the full instructions
+> itself.
+>
+> For example, if the user asks to "deploy the experiment catalog and generate
+> demo data," that is two tasks — one sub-agent to deploy, another to generate
+> data. Break the work into logical tasks and run each in its own sub-agent.
+
 # Experiment Catalog Installation
 
 The experiment catalog is an open source tool for tracking and analyzing experiments. It provides a structured way to define projects, experiments, permutations, metrics, and results, enabling teams to systematically compare different approaches and configurations.
@@ -15,8 +27,6 @@ This skill targets users who have never used the experiment catalog. They may no
 - Never just stub things out in the configuration, provision everything the user asks for with the appropriate permissions and settings to make it work.
 
 - Never assume you know what to name something or what settings to use. Always ask the user for preferences and guidance on naming, configuration options, and deployment choices.
-
-- All tasks should be delegated to sub-agents.
 
 ## Source Code
 

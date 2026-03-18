@@ -3,11 +3,22 @@ name: aml-eval-runner-demo
 description: Deploy demo inference and evaluation modules for the AML Evaluation Runner. Provides a zero-dependency end-to-end pipeline using GTC v2 ground truth exports with lightweight string-similarity metrics.
 ---
 
+## Delegation Requirement
+
+> [!IMPORTANT]
+> **Do not execute tasks from this skill directly.** Every discrete task you
+> derive from this skill must be delegated to its own sub-agent. Each sub-agent
+> should be given this skill file's path so it can read the full instructions
+> itself.
+>
+> For example, if the user asks to "set up demo modules and run ground truths
+> through the pipeline," that is two tasks — one sub-agent to set up the demo
+> modules, another to run the pipeline. Break the work into logical tasks and
+> run each in its own sub-agent.
+
 # AML Evaluation Runner Demo
 
 Deploy a pair of demo plug-in modules — inference and evaluation — that let you run the AML Evaluation Runner pipeline end-to-end without any API keys, model endpoints, or heavy dependencies. The demo modules accept ground truth records in the GTC v2 snapshot format and produce deterministic metrics using only the Python standard library.
-
-IMPORTANT: All tasks should be delegated to sub-agents.
 
 ## Prerequisites
 

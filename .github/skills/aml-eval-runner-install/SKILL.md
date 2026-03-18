@@ -4,6 +4,19 @@ name: aml-eval-runner-install
 description: Clone, configure, and deploy the AML Evaluation Runner (commercial-software-engineering/aml-evaluation-runner). Provisions Azure Machine Learning workspace, Storage Account, and supporting resources. Builds the experiment image and runs evaluation pipelines. Trigger phrases include "install AML eval runner", "run AML evaluation runner", "AML eval runner", "experiment runner setup", "install evaluation runner", "deploy eval runner".
 ---
 
+## Delegation Requirement
+
+> [!IMPORTANT]
+> **Do not execute tasks from this skill directly.** Every discrete task you
+> derive from this skill must be delegated to its own sub-agent. Each sub-agent
+> should be given this skill file's path so it can read the full instructions
+> itself.
+>
+> For example, if the user asks to "deploy the AML runner and run a pipeline,"
+> that is two tasks — one sub-agent to deploy infrastructure, another to
+> configure and run the pipeline. Break the work into logical tasks and run
+> each in its own sub-agent.
+
 # AML Evaluation Runner Installation
 
 The AML Evaluation Runner is a reusable framework built on Azure Machine Learning for running inference, evaluation, and summarization experiments at scale. It uses AML parallel jobs for concurrency and retry, supports iteration-based evaluation for statistical significance, and is agnostic about inference and evaluation implementations. Users plug in their own inference and evaluation modules while the runner orchestrates the pipeline.
@@ -21,8 +34,6 @@ This skill targets users who have never used the AML Evaluation Runner. They may
 - Ask the user whether they want to use either of the available "actions" (catalog integration, mlflow logging). Actions are optional plug-ins that hook into the inference, evaluation, or summarization steps.
 
 - Do not deploy VNets, Private Endpoints, Private DNS Zones, NSGs, or any network-isolation infrastructure unless the user explicitly requests it. The default deployment should use public endpoints with RBAC-based security. The `SetupEnv.ps1` Bicep templates deploy all of this extra infrastructure automatically — do not use them unless the user specifically asks for private networking or production hardening.
-
-- When orchestrating multi-tool deployments, delegate AML Runner installation to a sub-agent that reads this skill file first. This keeps the parent conversation context focused and makes this skill portable across repos.
 
 ## Source Code
 
