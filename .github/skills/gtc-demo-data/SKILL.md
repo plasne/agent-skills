@@ -8,7 +8,7 @@ description: Generate realistic sample ground truth items for the Ground Truth C
 
 Populate a running Ground Truth Curator instance with realistic ground truth items for development, testing, or demonstration. The script creates draft items across one or more datasets with varied questions, references, multi-turn conversations, and tags so the self-serve queue has items available for "request more."
 
-When orchestrating multi-tool deployments, delegate GTC data seeding to a sub-agent that reads this skill file first. This keeps the parent conversation context focused and makes this skill portable across repos.
+IMPORTANT: All tasks should be delegated to sub-agents.
 
 ## Prerequisites
 

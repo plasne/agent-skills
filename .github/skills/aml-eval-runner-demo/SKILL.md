@@ -7,7 +7,7 @@ description: Deploy demo inference and evaluation modules for the AML Evaluation
 
 Deploy a pair of demo plug-in modules — inference and evaluation — that let you run the AML Evaluation Runner pipeline end-to-end without any API keys, model endpoints, or heavy dependencies. The demo modules accept ground truth records in the GTC v2 snapshot format and produce deterministic metrics using only the Python standard library.
 
-When orchestrating multi-tool deployments, delegate demo module setup and pipeline execution to a sub-agent that reads this skill file first. This keeps the parent conversation context focused and makes this skill portable across repos.
+IMPORTANT: All tasks should be delegated to sub-agents.
 
 ## Prerequisites
 

@@ -16,7 +16,7 @@ This skill targets users who have never used the Ground Truth Curator. They may 
 
 - Never assume you know what to name something or what settings to use. Always ask the user for preferences and guidance on naming, configuration options, and deployment choices.
 
-- When orchestrating multi-tool deployments, delegate GTC tasks to a sub-agent that reads this skill file first. This keeps the parent conversation context focused and makes this skill portable across repos.
+- All tasks should be delegated to sub-agents.
 
 ## Source Code
 

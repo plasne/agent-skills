@@ -7,7 +7,7 @@ description: Generate realistic demo data for the experiment catalog including p
 
 Populate a running experiment catalog instance with realistic demo data for development, testing, or demonstration purposes. The script creates two projects, multiple experiments per project with different hypotheses, several permutations (sets) per experiment, hundreds of results per permutation, metric definitions, and tags applied to refs.
 
-When orchestrating multi-tool deployments, delegate demo data generation to a sub-agent that reads this skill file first. This keeps the parent conversation context focused and makes this skill portable across repos.
+IMPORTANT: All tasks should be delegated to sub-agents.
 
 ## Prerequisites
 
