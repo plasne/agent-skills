@@ -1,4 +1,3 @@
-````skill
 ---
 name: gtc-install
 description: Clone, build, and run the Ground Truth Curator (andrewDoing/GroundTruthCurator). Starts the Cosmos DB Emulator, initializes containers, builds the Python backend and React frontend, and runs in consolidated or development mode. Trigger phrases include "install GTC", "run ground truth curator", "GTC", "GTC dev setup".
@@ -115,14 +114,14 @@ export GTC_ENV_FILE="environments/.dev.env,environments/local.env"
 
 Key values provided by the default dev env:
 
-| Variable | Value | Purpose |
-|---|---|---|
-| `GTC_REPO_BACKEND` | `cosmos` | Use Cosmos DB as the data store |
-| `GTC_COSMOS_ENDPOINT` | `http://localhost:8081` | Emulator endpoint |
-| `GTC_COSMOS_KEY` | *(emulator well-known key)* | Authentication key |
-| `GTC_COSMOS_CONNECTION_VERIFY` | `false` | Skip TLS verification for emulator |
-| `GTC_USE_COSMOS_EMULATOR` | `true` | Enable emulator mode |
-| `GTC_COSMOS_DISABLE_UNICODE_ESCAPE` | `true` | Workaround for emulator Unicode bug |
+| Variable                            | Value                       | Purpose                             |
+| ----------------------------------- | --------------------------- | ----------------------------------- |
+| `GTC_REPO_BACKEND`                  | `cosmos`                    | Use Cosmos DB as the data store     |
+| `GTC_COSMOS_ENDPOINT`               | `http://localhost:8081`     | Emulator endpoint                   |
+| `GTC_COSMOS_KEY`                    | _(emulator well-known key)_ | Authentication key                  |
+| `GTC_COSMOS_CONNECTION_VERIFY`      | `false`                     | Skip TLS verification for emulator  |
+| `GTC_USE_COSMOS_EMULATOR`           | `true`                      | Enable emulator mode                |
+| `GTC_COSMOS_DISABLE_UNICODE_ESCAPE` | `true`                      | Workaround for emulator Unicode bug |
 
 If you need secrets or developer-specific overrides, create `environments/local.env` (git-ignored):
 
@@ -169,12 +168,12 @@ npm install
 
 Optionally copy `.env.example` to `.env.local` and adjust:
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `VITE_API_BASE_URL` | `http://localhost:8000` | Backend base URL |
-| `VITE_OPENAPI_URL` | *(derived from API base)* | OpenAPI spec URL for type generation |
-| `VITE_DEV_USER_ID` | *(none)* | Optional dev-only user id sent as `X-User-Id` |
-| `VITE_SELF_SERVE_LIMIT` | *(none)* | Optional default for self-serve assignments |
+| Variable                | Default                   | Purpose                                       |
+| ----------------------- | ------------------------- | --------------------------------------------- |
+| `VITE_API_BASE_URL`     | `http://localhost:8000`   | Backend base URL                              |
+| `VITE_OPENAPI_URL`      | _(derived from API base)_ | OpenAPI spec URL for type generation          |
+| `VITE_DEV_USER_ID`      | _(none)_                  | Optional dev-only user id sent as `X-User-Id` |
+| `VITE_SELF_SERVE_LIMIT` | _(none)_                  | Optional default for self-serve assignments   |
 
 ### Step 7 — Run the Frontend
 
@@ -372,11 +371,11 @@ Inside the container, use `http://host.docker.internal:8081` to reach the host's
 
 ## Ports
 
-| Service | Default Port | Purpose |
-|---|---|---|
-| Backend (FastAPI) | 8000 | API server |
-| Frontend (Vite dev) | 5173 | Development UI server |
-| Cosmos DB Emulator | 8081 | Local database |
+| Service             | Default Port | Purpose               |
+| ------------------- | ------------ | --------------------- |
+| Backend (FastAPI)   | 8000         | API server            |
+| Frontend (Vite dev) | 5173         | Development UI server |
+| Cosmos DB Emulator  | 8081         | Local database        |
 
 ## What Resources Are Used For
 
@@ -401,52 +400,52 @@ When deploying with EasyAuth, create an Entra ID app registration and configure 
 
 1. **Create the app registration** with a redirect URI for EasyAuth's callback:
 
-    ```bash
-    az ad app create \
-      --display-name "<app-name>" \
-      --sign-in-audience AzureADMyOrg \
-      --web-redirect-uris "https://<gtc-fqdn>/.auth/login/aad/callback" \
-      --enable-id-token-issuance true
-    ```
+   ```bash
+   az ad app create \
+     --display-name "<app-name>" \
+     --sign-in-audience AzureADMyOrg \
+     --web-redirect-uris "https://<gtc-fqdn>/.auth/login/aad/callback" \
+     --enable-id-token-issuance true
+   ```
 
 2. **Create a service principal** for the app:
 
-    ```bash
-    az ad sp create --id <appId>
-    ```
+   ```bash
+   az ad sp create --id <appId>
+   ```
 
 3. **Add an Application ID URI** (required for Bearer token access):
 
-    ```bash
-    az ad app update --id <appId> \
-      --identifier-uris "api://<appId>"
-    ```
+   ```bash
+   az ad app update --id <appId> \
+     --identifier-uris "api://<appId>"
+   ```
 
 4. **Expose a delegated scope** (`user_impersonation`) so users and CLI tools can request tokens:
 
-    ```bash
-    az ad app update --id <appId> --set \
-      "api.oauth2PermissionScopes=[{\"id\":\"$(uuidgen)\",\"adminConsentDescription\":\"Access GTC\",\"adminConsentDisplayName\":\"Access GTC\",\"isEnabled\":true,\"type\":\"User\",\"userConsentDescription\":\"Access GTC\",\"userConsentDisplayName\":\"Access GTC\",\"value\":\"user_impersonation\"}]"
-    ```
+   ```bash
+   az ad app update --id <appId> --set \
+     "api.oauth2PermissionScopes=[{\"id\":\"$(uuidgen)\",\"adminConsentDescription\":\"Access GTC\",\"adminConsentDisplayName\":\"Access GTC\",\"isEnabled\":true,\"type\":\"User\",\"userConsentDescription\":\"Access GTC\",\"userConsentDisplayName\":\"Access GTC\",\"value\":\"user_impersonation\"}]"
+   ```
 
 5. **Pre-authorize Azure CLI** so `az account get-access-token` works without admin consent:
 
-    ```bash
-    SCOPE_ID=$(az ad app show --id <appId> \
-      --query "api.oauth2PermissionScopes[0].id" -o tsv)
+   ```bash
+   SCOPE_ID=$(az ad app show --id <appId> \
+     --query "api.oauth2PermissionScopes[0].id" -o tsv)
 
-    az ad app update --id <appId> --set \
-      "api.preAuthorizedApplications=[{\"appId\":\"04b07795-8ddb-461a-bbee-02f9e1bf7b46\",\"delegatedPermissionIds\":[\"$SCOPE_ID\"]}]"
-    ```
+   az ad app update --id <appId> --set \
+     "api.preAuthorizedApplications=[{\"appId\":\"04b07795-8ddb-461a-bbee-02f9e1bf7b46\",\"delegatedPermissionIds\":[\"$SCOPE_ID\"]}]"
+   ```
 
-    The ID `04b07795-8ddb-461a-bbee-02f9e1bf7b46` is the well-known Azure CLI first-party application.
+   The ID `04b07795-8ddb-461a-bbee-02f9e1bf7b46` is the well-known Azure CLI first-party application.
 
 6. **Create a client secret** (required by EasyAuth):
 
-    ```bash
-    az ad app credential reset --id <appId> --display-name "EasyAuth" \
-      --end-date "$(date -u -v+180d +%Y-%m-%dT%H:%M:%SZ)"
-    ```
+   ```bash
+   az ad app credential reset --id <appId> --display-name "EasyAuth" \
+     --end-date "$(date -u -v+180d +%Y-%m-%dT%H:%M:%SZ)"
+   ```
 
 ### Container Apps EasyAuth Configuration
 
@@ -542,10 +541,10 @@ GTC_AZ_MONITOR_CONNECTION_STRING=<your-connection-string>
 
 Optional controls:
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `GTC_AZ_MONITOR_ENABLED` | `true` | Toggle telemetry wiring |
-| `GTC_SERVICE_NAME` | `gtc-backend` | `service.name` resource attribute |
+| Variable                 | Default       | Purpose                           |
+| ------------------------ | ------------- | --------------------------------- |
+| `GTC_AZ_MONITOR_ENABLED` | `true`        | Toggle telemetry wiring           |
+| `GTC_SERVICE_NAME`       | `gtc-backend` | `service.name` resource attribute |
 
 When no connection string is provided, telemetry is a no-op.
 
@@ -553,13 +552,13 @@ When no connection string is provided, telemetry is a no-op.
 
 Client telemetry is configured via Vite env vars:
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `VITE_TELEMETRY_BACKEND` | `otlp` | `otlp`, `appinsights`, or `none` |
-| `VITE_OTLP_EXPORTER_URL` | *(none)* | OTLP HTTP collector endpoint |
-| `VITE_APPINSIGHTS_CONNECTION_STRING` | *(none)* | Azure App Insights connection string |
-| `VITE_ENVIRONMENT` | *(none)* | Environment label |
-| `VITE_BUILD_SHA` | *(none)* | Short commit SHA |
+| Variable                             | Default  | Purpose                              |
+| ------------------------------------ | -------- | ------------------------------------ |
+| `VITE_TELEMETRY_BACKEND`             | `otlp`   | `otlp`, `appinsights`, or `none`     |
+| `VITE_OTLP_EXPORTER_URL`             | _(none)_ | OTLP HTTP collector endpoint         |
+| `VITE_APPINSIGHTS_CONNECTION_STRING` | _(none)_ | Azure App Insights connection string |
+| `VITE_ENVIRONMENT`                   | _(none)_ | Environment label                    |
+| `VITE_BUILD_SHA`                     | _(none)_ | Short commit SHA                     |
 
 Telemetry automatically no-ops in demo mode or when config is missing.
 
@@ -649,4 +648,3 @@ uv run python scripts/delete_cosmos_emulator_dbs.py
 ## Support Documents
 
 For additional reference on hardening and production security, see [references/hardening.md](references/hardening.md).
-````

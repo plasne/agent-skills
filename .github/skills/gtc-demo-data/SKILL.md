@@ -1,6 +1,5 @@
-````skill
 ---
-name: generate-gtc-data
+name: gtc-demo-data
 description: Generate realistic sample ground truth items for the Ground Truth Curator so SMEs can test the self-serve queue and "request more" workflow.
 ---
 
@@ -37,11 +36,14 @@ When admin consent is unavailable or the GTC API is not accessible, generate gro
   "bucket": 0,
   "status": "approved",
   "history": [
-    {"role": "user", "msg": "What is Azure Machine Learning?"},
-    {"role": "assistant", "msg": "Azure Machine Learning is a cloud service for training and deploying ML models."}
+    { "role": "user", "msg": "What is Azure Machine Learning?" },
+    {
+      "role": "assistant",
+      "msg": "Azure Machine Learning is a cloud service for training and deploying ML models."
+    }
   ],
-  "manualTags": {"source": "synthetic", "topic": "general"},
-  "computedTags": {"question_length": "medium"}
+  "manualTags": { "source": "synthetic", "topic": "general" },
+  "computedTags": { "question_length": "medium" }
 }
 ```
 
@@ -80,18 +82,18 @@ uv run python scripts/generate_gtc_sample_data.py --dataset golden --count 50 --
 
 ## Parameters Reference
 
-| Parameter      | Default                 | Description                                                         |
-| -------------- | ----------------------- | ------------------------------------------------------------------- |
-| `--base-url`   | `http://localhost:8000` | Base URL of the running GTC backend.                                |
-| `--api-prefix` | `/v1`                   | API prefix path.                                                    |
-| `--user`       | `seed-script`           | `X-User-Id` header for dev auth.                                    |
-| `--dataset`    | `demo`                  | Single dataset name (ignored when `--datasets` is provided).        |
-| `--datasets`   | —                       | Comma-separated list of dataset names to distribute items across.   |
-| `--count`      | `100`                   | Total number of ground truth items to create.                       |
-| `--buckets`    | —                       | Number of sampling buckets (omit to let the server decide).         |
-| `--approve`    | `false`                 | If set, mark all items as approved on import.                       |
-| `--multi-turn` | `0.2`                   | Fraction of items that are multi-turn conversations (0.0 – 1.0).   |
-| `--seed`       | —                       | Random seed for reproducible data generation.                       |
+| Parameter      | Default                 | Description                                                       |
+| -------------- | ----------------------- | ----------------------------------------------------------------- |
+| `--base-url`   | `http://localhost:8000` | Base URL of the running GTC backend.                              |
+| `--api-prefix` | `/v1`                   | API prefix path.                                                  |
+| `--user`       | `seed-script`           | `X-User-Id` header for dev auth.                                  |
+| `--dataset`    | `demo`                  | Single dataset name (ignored when `--datasets` is provided).      |
+| `--datasets`   | —                       | Comma-separated list of dataset names to distribute items across. |
+| `--count`      | `100`                   | Total number of ground truth items to create.                     |
+| `--buckets`    | —                       | Number of sampling buckets (omit to let the server decide).       |
+| `--approve`    | `false`                 | If set, mark all items as approved on import.                     |
+| `--multi-turn` | `0.2`                   | Fraction of items that are multi-turn conversations (0.0 – 1.0).  |
+| `--seed`       | —                       | Random seed for reproducible data generation.                     |
 
 ## What Gets Created
 
@@ -117,14 +119,14 @@ A configurable fraction of items (default 20%) include multi-turn conversation h
 
 Tags are randomized with realistic distributions:
 
-| Tag Group      | Values                                               | Distribution     |
-| -------------- | ---------------------------------------------------- | ---------------- |
-| `source`       | synthetic, sme, user                                 | 60 / 25 / 15 %  |
-| `answerability`| answerable, not_answerable, should_not_answer         | 75 / 15 / 10 %  |
-| `topic`        | general, compatibility, install, performance, security | ~20 % each       |
-| `intent`       | informational, action, clarification, feedback        | 40 / 30 / 20 / 10 % |
-| `expertise`    | novice, expert                                       | 65 / 35 %       |
-| `difficulty`   | easy, medium, hard                                   | 40 / 40 / 20 %  |
+| Tag Group       | Values                                                 | Distribution        |
+| --------------- | ------------------------------------------------------ | ------------------- |
+| `source`        | synthetic, sme, user                                   | 60 / 25 / 15 %      |
+| `answerability` | answerable, not_answerable, should_not_answer          | 75 / 15 / 10 %      |
+| `topic`         | general, compatibility, install, performance, security | ~20 % each          |
+| `intent`        | informational, action, clarification, feedback         | 40 / 30 / 20 / 10 % |
+| `expertise`     | novice, expert                                         | 65 / 35 %           |
+| `difficulty`    | easy, medium, hard                                     | 40 / 40 / 20 %      |
 
 ### Using the Self-Serve Queue
 
@@ -157,15 +159,13 @@ The `api://<appId>` value is the Application ID URI of the GTC app registration.
 
 ## Troubleshooting
 
-| Symptom                    | Fix                                                                           |
-| -------------------------- | ----------------------------------------------------------------------------- |
-| `ConnectionError`          | Confirm the GTC backend is running at the base URL.                           |
-| `401 Unauthorized`         | If running locally without auth, ensure `GTC_AUTH_MODE=dev`. For deployed instances with EasyAuth, acquire a Bearer token: `TOKEN=$(az account get-access-token --resource api://<appId> --query accessToken -o tsv)` and pass `--header "Authorization: Bearer $TOKEN"`. Never disable EasyAuth as a workaround. |
-| `400 Bad Request`          | Items may have invalid tags. Check the tag schema via `GET /v1/tags/schema`.  |
-| Items not appearing in queue | Verify items are in `draft` status and unassigned (`assignedTo` is null).   |
-| `httpx` not found          | Run from the GTC backend directory with `uv run` to use project dependencies. |
-| Admin consent unavailable  | When admin consent cannot be granted (common in non-production tenants), generate ground truths directly in GTC v2 JSON format and upload to the AML datastore, bypassing the GTC API export. Browser-based EasyAuth login still works for interactive users. |
+| Symptom                      | Fix                                                                                                                                                                                                                                                                                                               |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ConnectionError`            | Confirm the GTC backend is running at the base URL.                                                                                                                                                                                                                                                               |
+| `401 Unauthorized`           | If running locally without auth, ensure `GTC_AUTH_MODE=dev`. For deployed instances with EasyAuth, acquire a Bearer token: `TOKEN=$(az account get-access-token --resource api://<appId> --query accessToken -o tsv)` and pass `--header "Authorization: Bearer $TOKEN"`. Never disable EasyAuth as a workaround. |
+| `400 Bad Request`            | Items may have invalid tags. Check the tag schema via `GET /v1/tags/schema`.                                                                                                                                                                                                                                      |
+| Items not appearing in queue | Verify items are in `draft` status and unassigned (`assignedTo` is null).                                                                                                                                                                                                                                         |
+| `httpx` not found            | Run from the GTC backend directory with `uv run` to use project dependencies.                                                                                                                                                                                                                                     |
+| Admin consent unavailable    | When admin consent cannot be granted (common in non-production tenants), generate ground truths directly in GTC v2 JSON format and upload to the AML datastore, bypassing the GTC API export. Browser-based EasyAuth login still works for interactive users.                                                     |
 
 > Brought to you by att/GroundTruthCurator
-
-````

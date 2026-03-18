@@ -1,4 +1,3 @@
-````skill
 ---
 name: aml-eval-runner-install
 description: Clone, configure, and deploy the AML Evaluation Runner (commercial-software-engineering/aml-evaluation-runner). Provisions Azure Machine Learning workspace, Storage Account, and supporting resources. Builds the experiment image and runs evaluation pipelines. Trigger phrases include "install AML eval runner", "run AML evaluation runner", "AML eval runner", "experiment runner setup", "install evaluation runner", "deploy eval runner".
@@ -72,6 +71,7 @@ Before using the AML Evaluation Runner, the following must be installed:
   az extension add --name ml
   az extension add --name application-insights
   ```
+
 - [Docker Desktop](https://www.docker.com/) — required for building AML container images.
 - [PowerShell](https://learn.microsoft.com/powershell/scripting/install/installing-powershell) — optional, only needed if using `SetupEnv.ps1` for Bicep-based deployment. On macOS: `brew install powershell/tap/powershell`.
 - [DevTunnel](https://learn.microsoft.com/azure/developer/dev-tunnels/get-started) — optional, required only for running inference locally against a remote AML job.
@@ -404,42 +404,42 @@ If you used `SetupEnv.ps1`, it generates `experiment/.test.env` automatically. O
 
 #### Required Environment Variables
 
-| Variable | Description |
-|---|---|
-| `AML_SUBSCRIPTION_ID` | Azure subscription ID |
-| `AML_RESOURCE_GROUP_NAME` | Resource group name |
-| `AML_WORKSPACE_NAME` | AML workspace name |
-| `AML_COMPUTE_NAME` | AML compute cluster name |
-| `AML_EXPERIMENT_NAME` | Experiment name (spaces converted to underscores, lowercased) |
-| `AML_IMAGE_NAME` | Docker image for AML jobs (for example, `mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04`) |
-| `AML_JOB_INSTANCE_COUNT` | Number of compute instances |
-| `AML_JOB_INPUT_DATASTORE` | Input datastore name |
-| `AML_JOB_OUTPUT_DATASTORE` | Output datastore name |
-| `AML_GROUND_TRUTHS_PATH` | Path to ground truths in the input datastore |
-| `JOB_MANAGED_IDENTITY_ID` | Managed identity client ID used by compute |
-| `AML_APP_INSIGHTS_CONNECTION_STRING` | Application Insights connection string (can be a Key Vault secret URL) |
-| `AML_INF_MODULE_DIR` | Path to the inference module directory |
-| `AML_EVAL_MODULE_DIR` | Path to the evaluation module directory |
+| Variable                             | Description                                                                                   |
+| ------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `AML_SUBSCRIPTION_ID`                | Azure subscription ID                                                                         |
+| `AML_RESOURCE_GROUP_NAME`            | Resource group name                                                                           |
+| `AML_WORKSPACE_NAME`                 | AML workspace name                                                                            |
+| `AML_COMPUTE_NAME`                   | AML compute cluster name                                                                      |
+| `AML_EXPERIMENT_NAME`                | Experiment name (spaces converted to underscores, lowercased)                                 |
+| `AML_IMAGE_NAME`                     | Docker image for AML jobs (for example, `mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04`) |
+| `AML_JOB_INSTANCE_COUNT`             | Number of compute instances                                                                   |
+| `AML_JOB_INPUT_DATASTORE`            | Input datastore name                                                                          |
+| `AML_JOB_OUTPUT_DATASTORE`           | Output datastore name                                                                         |
+| `AML_GROUND_TRUTHS_PATH`             | Path to ground truths in the input datastore                                                  |
+| `JOB_MANAGED_IDENTITY_ID`            | Managed identity client ID used by compute                                                    |
+| `AML_APP_INSIGHTS_CONNECTION_STRING` | Application Insights connection string (can be a Key Vault secret URL)                        |
+| `AML_INF_MODULE_DIR`                 | Path to the inference module directory                                                        |
+| `AML_EVAL_MODULE_DIR`                | Path to the evaluation module directory                                                       |
 
 #### Optional Environment Variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `AML_LOG_LEVEL` | `INFO` | Logging level |
-| `AML_CONFIG_TAG_NAME` | `NOT-SET` | Config tag name for experiment tracking |
-| `AML_INFERENCE_CONCURRENCY` | `1` | Inference parallelism per instance |
-| `AML_EVAL_CONCURRENCY` | `1` | Evaluation parallelism per instance |
-| `AML_ITERATION_COUNT` | `0` | Iteration count (0 skips the iteration step) |
-| `AML_INF_TIMEOUT_SECONDS` | `360` | Inference timeout in seconds (minimum 30) |
-| `AML_EVAL_TIMEOUT_SECONDS` | `120` | Evaluation timeout in seconds (minimum 30) |
-| `AML_SUMMARY_TIMEOUT_SECONDS` | `300` | Summarization timeout in seconds (minimum 30) |
-| `AML_INF_ENV_PATH` | — | Path to the inference `.env` file |
-| `AML_EVAL_ENV_PATH` | — | Path to the evaluation `.env` file |
-| `INF_INFERENCE_SERVICE_URL` | — | Remote inference service URL (for DevTunnel-based local inference) |
-| `INF_INFERENCE_SERVICE_TUNNEL_TOKEN` | — | DevTunnel token for remote inference |
-| `EVAL_SERVICE_URL` | — | Remote evaluation service URL |
-| `GROUND_TRUTH_INCLUDE_TAGS` | — | Comma-delimited tag filter for ground truths |
-| `ENABLED_ACTIONS` | — | Comma-delimited action names to enable |
+| Variable                             | Default   | Description                                                        |
+| ------------------------------------ | --------- | ------------------------------------------------------------------ |
+| `AML_LOG_LEVEL`                      | `INFO`    | Logging level                                                      |
+| `AML_CONFIG_TAG_NAME`                | `NOT-SET` | Config tag name for experiment tracking                            |
+| `AML_INFERENCE_CONCURRENCY`          | `1`       | Inference parallelism per instance                                 |
+| `AML_EVAL_CONCURRENCY`               | `1`       | Evaluation parallelism per instance                                |
+| `AML_ITERATION_COUNT`                | `0`       | Iteration count (0 skips the iteration step)                       |
+| `AML_INF_TIMEOUT_SECONDS`            | `360`     | Inference timeout in seconds (minimum 30)                          |
+| `AML_EVAL_TIMEOUT_SECONDS`           | `120`     | Evaluation timeout in seconds (minimum 30)                         |
+| `AML_SUMMARY_TIMEOUT_SECONDS`        | `300`     | Summarization timeout in seconds (minimum 30)                      |
+| `AML_INF_ENV_PATH`                   | —         | Path to the inference `.env` file                                  |
+| `AML_EVAL_ENV_PATH`                  | —         | Path to the evaluation `.env` file                                 |
+| `INF_INFERENCE_SERVICE_URL`          | —         | Remote inference service URL (for DevTunnel-based local inference) |
+| `INF_INFERENCE_SERVICE_TUNNEL_TOKEN` | —         | DevTunnel token for remote inference                               |
+| `EVAL_SERVICE_URL`                   | —         | Remote evaluation service URL                                      |
+| `GROUND_TRUTH_INCLUDE_TAGS`          | —         | Comma-delimited tag filter for ground truths                       |
+| `ENABLED_ACTIONS`                    | —         | Comma-delimited action names to enable                             |
 
 #### Override Variables
 
@@ -655,28 +655,27 @@ The runner supports Application Insights integration via the `AML_APP_INSIGHTS_C
 
 ## Troubleshooting
 
-| Issue | Cause | Solution |
-|---|---|---|
-| `az: command not found` | Azure CLI missing | Install from <https://learn.microsoft.com/cli/azure/install-azure-cli> |
-| `az monitor app-insights` prompts to install extension | `application-insights` extension not pre-installed | Run `az extension add --name application-insights` before deploying. Also run `az config set extension.use_dynamic_install=yes_without_prompt` to prevent future interactive prompts. |
-| `uv: command not found` | uv missing | Install from <https://docs.astral.sh/uv> |
-| `pwsh: command not found` | PowerShell missing | Install from <https://learn.microsoft.com/powershell/scripting/install/installing-powershell> |
-| `docker: command not found` | Docker missing | Install from <https://www.docker.com/> |
-| Bicep deployment fails | Missing permissions | Ensure you are an Owner or Contributor on the target subscription |
-| Bicep deployment hangs | Large template with VNet/Private Endpoints takes 15–30 min | Use `az` CLI for individual resources instead; or be patient and monitor via `az deployment group list` |
-| HTTPS clone fails with "Repository not found" | Private repo, no cached credential | Clone via SSH: `git clone git@github.com:commercial-software-engineering/aml-evaluation-runner.git` |
-| `403 Forbidden` on storage | Missing RBAC role | Assign **Storage Blob Data Contributor** to the managed identity on the storage account |
-| `403` or network error from storage after workspace creation | AML workspace creation or Bicep templates may set `publicNetworkAccess: Disabled` on the linked storage account | Run `az storage account update --name <name> --resource-group <rg> --public-network-access Enabled` |
-| AML job fails to start | Image build not configured | Run `az ml workspace update --name <ws> --resource-group <rg> --image-build-compute <compute>` |
-| `az ml workspace create` fails with "ARM string is not formatted correctly" | Simple resource names passed instead of full ARM resource IDs | Use `az storage account show --query id -o tsv` (and equivalent for Key Vault, ACR, App Insights) to get full ARM IDs before passing them to `az ml workspace create` |
-| `az ml datastore create` fails with "arguments are required: --file/-f" | Inline parameters not supported by CLI v2 | Create a YAML specification file and pass it via `--file`. See Step 9 for the schema. |
-| AML job times out | Timeout too short | Increase `AML_INF_TIMEOUT_SECONDS`, `AML_EVAL_TIMEOUT_SECONDS`, or `AML_SUMMARY_TIMEOUT_SECONDS` |
-| `EnableAML` not passed | All resources deployed | Pass `-EnableAML` explicitly to `SetupEnv.ps1` to deploy only runner resources |
-| ACR login fails | Not authenticated | Run `az acr login --name <acr-name>` |
-| Image build fails on Apple Silicon | Wrong platform | Build with `docker build --platform linux/amd64` |
-| DevTunnel token expired | Token needs refresh | Regenerate with `devtunnel token --scopes connect <id>` |
-| Ground truths not found | Wrong path or tag filter | Verify `AML_GROUND_TRUTHS_PATH` and `GROUND_TRUTH_INCLUDE_TAGS` in your `.env` |
-| `404: experiment not found` from catalog action | The experiment does not exist in the catalog | Create the experiment in the catalog before submitting the pipeline. The catalog action only POSTs results, it does not create experiments. |
-| Catalog action posts succeed (200) but no results visible in catalog experiment list | Results are stored per-set, not shown in the experiment summary | Query a specific set: `GET /api/projects/{project}/experiments/{experiment}/sets/{set_id}` to see the results. The experiment list endpoint does not inline results. |
-| `EVAL_SET_` prefixed variables not reaching the action | Prefix stripping misconfiguration | The `EVAL_SET_` prefix is stripped at runtime so `EVAL_SET_CATALOG_URL` becomes `CATALOG_URL`. Verify the full prefixed name in `.exp.env`. |
-````
+| Issue                                                                                | Cause                                                                                                           | Solution                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `az: command not found`                                                              | Azure CLI missing                                                                                               | Install from <https://learn.microsoft.com/cli/azure/install-azure-cli>                                                                                                                |
+| `az monitor app-insights` prompts to install extension                               | `application-insights` extension not pre-installed                                                              | Run `az extension add --name application-insights` before deploying. Also run `az config set extension.use_dynamic_install=yes_without_prompt` to prevent future interactive prompts. |
+| `uv: command not found`                                                              | uv missing                                                                                                      | Install from <https://docs.astral.sh/uv>                                                                                                                                              |
+| `pwsh: command not found`                                                            | PowerShell missing                                                                                              | Install from <https://learn.microsoft.com/powershell/scripting/install/installing-powershell>                                                                                         |
+| `docker: command not found`                                                          | Docker missing                                                                                                  | Install from <https://www.docker.com/>                                                                                                                                                |
+| Bicep deployment fails                                                               | Missing permissions                                                                                             | Ensure you are an Owner or Contributor on the target subscription                                                                                                                     |
+| Bicep deployment hangs                                                               | Large template with VNet/Private Endpoints takes 15–30 min                                                      | Use `az` CLI for individual resources instead; or be patient and monitor via `az deployment group list`                                                                               |
+| HTTPS clone fails with "Repository not found"                                        | Private repo, no cached credential                                                                              | Clone via SSH: `git clone git@github.com:commercial-software-engineering/aml-evaluation-runner.git`                                                                                   |
+| `403 Forbidden` on storage                                                           | Missing RBAC role                                                                                               | Assign **Storage Blob Data Contributor** to the managed identity on the storage account                                                                                               |
+| `403` or network error from storage after workspace creation                         | AML workspace creation or Bicep templates may set `publicNetworkAccess: Disabled` on the linked storage account | Run `az storage account update --name <name> --resource-group <rg> --public-network-access Enabled`                                                                                   |
+| AML job fails to start                                                               | Image build not configured                                                                                      | Run `az ml workspace update --name <ws> --resource-group <rg> --image-build-compute <compute>`                                                                                        |
+| `az ml workspace create` fails with "ARM string is not formatted correctly"          | Simple resource names passed instead of full ARM resource IDs                                                   | Use `az storage account show --query id -o tsv` (and equivalent for Key Vault, ACR, App Insights) to get full ARM IDs before passing them to `az ml workspace create`                 |
+| `az ml datastore create` fails with "arguments are required: --file/-f"              | Inline parameters not supported by CLI v2                                                                       | Create a YAML specification file and pass it via `--file`. See Step 9 for the schema.                                                                                                 |
+| AML job times out                                                                    | Timeout too short                                                                                               | Increase `AML_INF_TIMEOUT_SECONDS`, `AML_EVAL_TIMEOUT_SECONDS`, or `AML_SUMMARY_TIMEOUT_SECONDS`                                                                                      |
+| `EnableAML` not passed                                                               | All resources deployed                                                                                          | Pass `-EnableAML` explicitly to `SetupEnv.ps1` to deploy only runner resources                                                                                                        |
+| ACR login fails                                                                      | Not authenticated                                                                                               | Run `az acr login --name <acr-name>`                                                                                                                                                  |
+| Image build fails on Apple Silicon                                                   | Wrong platform                                                                                                  | Build with `docker build --platform linux/amd64`                                                                                                                                      |
+| DevTunnel token expired                                                              | Token needs refresh                                                                                             | Regenerate with `devtunnel token --scopes connect <id>`                                                                                                                               |
+| Ground truths not found                                                              | Wrong path or tag filter                                                                                        | Verify `AML_GROUND_TRUTHS_PATH` and `GROUND_TRUTH_INCLUDE_TAGS` in your `.env`                                                                                                        |
+| `404: experiment not found` from catalog action                                      | The experiment does not exist in the catalog                                                                    | Create the experiment in the catalog before submitting the pipeline. The catalog action only POSTs results, it does not create experiments.                                           |
+| Catalog action posts succeed (200) but no results visible in catalog experiment list | Results are stored per-set, not shown in the experiment summary                                                 | Query a specific set: `GET /api/projects/{project}/experiments/{experiment}/sets/{set_id}` to see the results. The experiment list endpoint does not inline results.                  |
+| `EVAL_SET_` prefixed variables not reaching the action                               | Prefix stripping misconfiguration                                                                               | The `EVAL_SET_` prefix is stripped at runtime so `EVAL_SET_CATALOG_URL` becomes `CATALOG_URL`. Verify the full prefixed name in `.exp.env`.                                           |
