@@ -3,132 +3,65 @@ name: experiment-catalog-demo-data
 description: Generate realistic demo data for the experiment catalog including projects, experiments, permutations, results with metrics, metric definitions, and tags.
 ---
 
-## Delegation Requirement
+## Execution Model
 
 > [!IMPORTANT]
-> **Do not execute tasks from this skill directly.** Every discrete task you
-> derive from this skill must be delegated to its own sub-agent. Each sub-agent
-> should be given this skill file's path so it can read the full instructions
-> itself.
->
-> For example, if the user asks to "populate the catalog with demo data," that
-> is one task for a sub-agent. If there are other tasks (deploying the catalog,
-> running a pipeline), those are separate sub-agents.
+> Do not execute this skill directly in the main thread. Delegate the data
+> generation task to its own sub-agent and pass this skill path to that
+> sub-agent.
+
+Keep demo-data generation separate from deployment or pipeline tasks. Store the
+created dataset summary in session artifacts instead of replaying bulk logs.
 
 # Generate Demo Data
 
-Populate a running experiment catalog instance with realistic demo data for development, testing, or demonstration purposes. The script creates two projects, multiple experiments per project with different hypotheses, several permutations (sets) per experiment, hundreds of results per permutation, metric definitions, and tags applied to refs.
+Use this skill to populate a running Experiment Catalog instance with realistic
+sample projects, experiments, permutations, results, metric definitions, and
+tags. Open `references/full-guide.md` for the long-form walkthrough.
 
 ## Prerequisites
 
-- Python 3.10 or later.
-- The `requests` package (`pip install requests` or `uv pip install requests`).
-- A running experiment catalog backend (default `http://localhost:6010`).
+- Python 3.10+
+- `requests`
+- a reachable catalog API, usually `http://localhost:6010`
 
-## Quick Start
+## Fast Path
 
-Run with defaults against a local catalog instance:
+Run with defaults:
 
 ```bash
 python scripts/generate_demo_data.py
 ```
 
-Override the base URL:
+Override the target:
 
 ```bash
 python scripts/generate_demo_data.py --base-url http://localhost:8080
 ```
 
-## Parameters Reference
+## Key Parameters
 
-| Parameter    | Default                 | Description                        |
-| ------------ | ----------------------- | ---------------------------------- |
-| `--base-url` | `http://localhost:6010` | Base URL of the catalog API.       |
-| `--results`  | `300`                   | Number of results per permutation. |
+- `--base-url`: catalog API base URL
+- `--results`: results per permutation, default `300`
 
-## What Gets Created
+## What the Script Creates
 
-### Projects
+- two demo projects
+- multiple experiments per project
+- multiple permutations per experiment
+- metric definitions
+- tags on refs
+- randomized but realistic result rows
 
-- `sprint01` — first sprint of RAG evaluation work.
-- `sprint02` — second sprint focused on generation quality.
+## Validation Checklist
 
-### Metric Definitions (per project)
+Verify all of the following before handoff:
 
-| Metric                    | Range | Aggregate | Order |
-| ------------------------- | ----- | --------- | ----- |
-| `retrieval_accuracy`      | 0 – 1 | Average   | 100   |
-| `retrieval_precision`     | 0 – 1 | Average   | 110   |
-| `retrieval_recall`        | 0 – 1 | Average   | 120   |
-| `generation_correctness`  | 0 – 1 | Average   | 300   |
-| `generation_faithfulness` | 0 – 1 | Average   | 310   |
-| `meta_inference_time`     | —     | Average   | 1000  |
-| `meta_inference_cost`     | —     | Cost      | 1010  |
+- the target catalog is reachable
+- projects and experiments exist after the run
+- results were written at the expected scale
+- any generated artifact or summary was saved for reuse
 
-### Experiments and Permutations
+## Local References
 
-Each project contains two experiments:
-
-| Experiment | Hypothesis                                               | Permutations                       |
-| ---------- | -------------------------------------------------------- | ---------------------------------- |
-| `top-k`    | Varying the retrieval top-k parameter improves accuracy. | `top-k-3`, `top-k-5`, `top-k-10`   |
-| `models`   | Larger models produce better generation quality.         | `gpt-4o-mini`, `gpt-4o`, `gpt-4.1` |
-
-The first permutation in each experiment is set as the baseline.
-
-### Tags
-
-| Tag              | Description               |
-| ---------------- | ------------------------- |
-| `multi-turn`     | Applied to ~15 % of refs. |
-| `complex-query`  | Applied to ~10 % of refs. |
-| `domain:finance` | Applied to ~25 % of refs. |
-| `domain:legal`   | Applied to ~25 % of refs. |
-
-### Results
-
-Each permutation contains `--results` results (default 100). Each result has:
-
-- A `ref` identifier (`q001` – `q100`).
-- All seven metrics with realistic random values. Values shift by permutation to simulate meaningful differences between parameter choices.
-
-## Troubleshooting
-
-| Symptom                                               | Fix                                                                                                                                                                                                                                                                                         |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ConnectionError`                                     | Confirm the catalog backend is running and reachable at the base URL.                                                                                                                                                                                                                       |
-| `400 Bad Request`                                     | The project or experiment may already exist. The script skips 409 conflicts but other errors surface.                                                                                                                                                                                       |
-| Missing `requests` module                             | Run `pip install requests`.                                                                                                                                                                                                                                                                 |
-| `401 Unauthorized`                                    | The catalog has authentication enabled. Acquire a Bearer token: `TOKEN=$(az account get-access-token --resource api://<appId> --query accessToken -o tsv)` and pass it with requests. Never disable OIDC or EasyAuth as a workaround. See the Authentication section below.                 |
-| `404` when posting results after running AML pipeline | The experiment must exist before the AML eval runner's catalog action can POST results. This script creates experiments automatically, but if you are using the catalog action without this script, create the experiment manually first. Both `name` and `hypothesis` fields are required. |
-
-## Authentication for Deployed Instances
-
-> [!IMPORTANT]
-> Never disable authentication on a deployed catalog instance to work around 401 errors. Always use Bearer tokens for programmatic access.
-
-When running against a deployed catalog with OIDC or EasyAuth enabled, the demo data script must authenticate. Acquire a token and pass it as a Bearer header:
-
-```bash
-TOKEN=$(az account get-access-token --resource api://<appId> --query accessToken -o tsv)
-
-python scripts/generate_demo_data.py \
-  --base-url "https://<catalog-fqdn>" \
-  --header "Authorization: Bearer $TOKEN"
-```
-
-If the script does not support a `--header` flag, modify the script's `requests.Session` to include the Authorization header, or use `curl` directly:
-
-```bash
-TOKEN=$(az account get-access-token --resource api://<appId> --query accessToken -o tsv)
-
-# Create project
-curl -X POST "https://<catalog-fqdn>/api/projects" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"name": "sprint01"}'
-```
-
-The `api://<appId>` value is the Application ID URI of the catalog's Entra app registration. See the **experiment-catalog-install** skill's Authentication section for complete setup.
-
-> Brought to you by microsoft/experiment-catalog
+- Extended instructions and troubleshooting: `references/full-guide.md`
